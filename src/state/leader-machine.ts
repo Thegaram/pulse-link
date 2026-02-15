@@ -8,10 +8,12 @@ import { MockSignaling } from '../signaling/mock.js';
 import { RoomStateManager } from './room-state.js';
 import { Metronome } from '../audio/metronome.js';
 import { LeaderState } from './types.js';
-import { generateRoomId, createMessage, StartAnnouncePayload } from '../types.js';
+import { generateRoomId, createMessage, StartAnnouncePayload, TimePingPayload, TimePongPayload } from '../types.js';
 import { IceConfig } from '../webrtc/types.js';
+import { ClockSync } from '../sync/clock.js';
 
-const COUNTDOWN_MS = 5000; // 5 second countdown before start
+const COUNTDOWN_MS = 3000; // 3 second countdown before start
+const PING_INTERVAL_MS = 1000; // Send time ping every 1 second
 
 export class LeaderStateMachine {
   private state: LeaderState = 'L_IDLE';
@@ -19,6 +21,9 @@ export class LeaderStateMachine {
   private connectionManager: LeaderConnectionManager | null = null;
   private metronome: Metronome;
   private myId: string;
+  private pingIntervals: Map<string, number> = new Map();
+  private pingSeq: Map<string, number> = new Map();
+  private clockSyncs: Map<string, ClockSync> = new Map();
 
   constructor(myId: string) {
     this.myId = myId;
@@ -53,10 +58,109 @@ export class LeaderStateMachine {
       console.log('📥 Control message from peer:', data);
     });
 
+    // Handle time-sync messages (pongs from peers)
+    this.connectionManager.onTimeSync((data) => {
+      if (data.type === 'time_pong') {
+        this.handleTimePong(data.peerId, data.payload);
+      }
+    });
+
+    // Handle peer connections - start time sync when peer connects
+    this.connectionManager.onPeerConnected((peerId) => {
+      console.log(`✅ Peer connected: ${peerId}, starting time sync`);
+      this.startTimeSyncWithPeer(peerId);
+    });
+
+    // Handle peer disconnections - stop time sync
+    this.connectionManager.onPeerDisconnected((peerId) => {
+      console.log(`❌ Peer disconnected: ${peerId}, stopping time sync`);
+      this.stopTimeSyncWithPeer(peerId);
+    });
+
     this.state = 'L_ROOM_OPEN';
     console.log(`✅ Leader created room: ${roomId} at ${bpm} BPM`);
 
     return roomId;
+  }
+
+  /**
+   * Start time synchronization with a peer
+   */
+  private startTimeSyncWithPeer(peerId: string): void {
+    if (!this.connectionManager) {
+      return;
+    }
+
+    // Initialize clock sync for this peer
+    this.clockSyncs.set(peerId, new ClockSync());
+    this.pingSeq.set(peerId, 0);
+
+    // Start sending pings
+    const intervalId = window.setInterval(() => {
+      if (!this.connectionManager) {
+        return;
+      }
+
+      const seq = this.pingSeq.get(peerId) ?? 0;
+      this.pingSeq.set(peerId, seq + 1);
+
+      const t1 = performance.now();
+      const ping: TimePingPayload = {
+        seq,
+        t1LeaderMs: t1
+      };
+
+      this.connectionManager.sendTimeSync(peerId, {
+        type: 'time_ping',
+        payload: ping
+      });
+    }, PING_INTERVAL_MS);
+
+    this.pingIntervals.set(peerId, intervalId);
+  }
+
+  /**
+   * Handle time pong from peer
+   */
+  private handleTimePong(peerId: string, pong: TimePongPayload): void {
+    const clockSync = this.clockSyncs.get(peerId);
+    if (!clockSync || !this.connectionManager) {
+      return;
+    }
+
+    const t4 = performance.now();
+
+    // Calculate offset
+    const stats = clockSync.processPong(
+      pong.t1LeaderMs,
+      pong.t2PeerMs,
+      pong.t3PeerMs,
+      t4
+    );
+
+    // Send offset to peer via control channel
+    this.connectionManager.sendControl(peerId, {
+      type: 'clock_offset',
+      payload: {
+        offsetMs: stats.offsetMs,
+        rtt: stats.rtt
+      }
+    });
+
+    console.log(`⏱️ Peer ${peerId} offset: ${stats.offsetMs.toFixed(2)}ms, RTT: ${stats.rtt.toFixed(2)}ms`);
+  }
+
+  /**
+   * Stop time synchronization with a peer
+   */
+  private stopTimeSyncWithPeer(peerId: string): void {
+    const intervalId = this.pingIntervals.get(peerId);
+    if (intervalId) {
+      clearInterval(intervalId);
+      this.pingIntervals.delete(peerId);
+    }
+    this.pingSeq.delete(peerId);
+    this.clockSyncs.delete(peerId);
   }
 
   /**
@@ -204,5 +308,12 @@ export class LeaderStateMachine {
    */
   isRunning(): boolean {
     return this.state === 'L_RUNNING';
+  }
+
+  /**
+   * Get metronome instance (for visual sync)
+   */
+  getMetronome(): Metronome {
+    return this.metronome;
   }
 }

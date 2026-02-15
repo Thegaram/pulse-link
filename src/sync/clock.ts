@@ -79,6 +79,13 @@ export class ClockSync {
   }
 
   /**
+   * Set offset from an authoritative source (for example, leader-calculated value).
+   */
+  setOffsetMs(offsetMs: number): void {
+    this.currentOffsetMs = this.offsetFilter.update(offsetMs);
+  }
+
+  /**
    * Convert leader timestamp to peer timestamp
    */
   leaderToPeerTime(leaderMs: number): number {

@@ -18,6 +18,7 @@ export class PeerStateMachine {
   private metronome: Metronome;
   private myId: string;
   private roomId: string | null = null;
+  private onStartCallback: (() => void) | null = null;
 
   constructor(myId: string) {
     this.myId = myId;
@@ -63,6 +64,8 @@ export class PeerStateMachine {
         this.handleStartAnnounce(data.payload);
       } else if (data.type === 'room_closed') {
         this.handleRoomClosed();
+      } else if (data.type === 'clock_offset') {
+        this.handleClockOffset(data.payload);
       }
     });
 
@@ -97,15 +100,16 @@ export class PeerStateMachine {
       type: 'time_pong',
       payload: pong
     });
+  }
 
-    // For peer: we don't have t4, so we can't calculate offset directly
-    // In a real implementation, leader would send back the calculated offset
-    // For now, we'll just track that we're receiving pings
-    if (this.state === 'C_SYNCING') {
-      // After receiving a few pings, consider ourselves synced
-      // In production, wait for leader to send offset via control channel
-      console.log('📡 Received time ping, clock syncing...');
-    }
+  /**
+   * Handle clock offset update from leader
+   */
+  private handleClockOffset(payload: { offsetMs: number; rtt: number }): void {
+    console.log(`⏱️ Clock offset update: ${payload.offsetMs.toFixed(2)}ms (RTT: ${payload.rtt.toFixed(2)}ms)`);
+
+    // Apply leader-calculated offset directly.
+    this.clockSync.setOffsetMs(payload.offsetMs);
   }
 
   /**
@@ -113,10 +117,6 @@ export class PeerStateMachine {
    */
   private handleStartAnnounce(payload: StartAnnouncePayload): void {
     console.log('🎵 Received start announcement:', payload);
-
-    // Note: In production, we would use the clock offset here
-    // For V1 MVP, we'll use the leader's timestamp directly
-    // assuming local network with minimal offset
 
     const { bpm, anchorLeaderMs, beatIndexAtAnchor } = payload;
 
@@ -136,6 +136,11 @@ export class PeerStateMachine {
     const delayMs = Math.max(0, anchorPeerMs - now);
 
     console.log(`⏳ Starting in ${delayMs}ms (offset: ${offsetMs}ms)`);
+
+    // Notify UI that we're starting
+    if (this.onStartCallback) {
+      this.onStartCallback();
+    }
 
     // Start metronome at anchor time
     setTimeout(() => {
@@ -197,5 +202,19 @@ export class PeerStateMachine {
    */
   getClockStats() {
     return this.clockSync.getStats();
+  }
+
+  /**
+   * Get metronome instance (for visual sync)
+   */
+  getMetronome(): Metronome {
+    return this.metronome;
+  }
+
+  /**
+   * Register callback for when metronome starts
+   */
+  onStart(callback: () => void): void {
+    this.onStartCallback = callback;
   }
 }

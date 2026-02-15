@@ -33,6 +33,9 @@ export class Metronome {
   // Track scheduled audio sources so we can cancel them
   private scheduledSources: AudioBufferSourceNode[] = [];
 
+  // Callback for visual sync (called when beat is scheduled)
+  private onBeatScheduledCallback: ((beatIndex: number, isDownbeat: boolean, timeMs: number) => void) | null = null;
+
   constructor() {}
 
   /**
@@ -65,13 +68,21 @@ export class Metronome {
     this.bpm = bpm;
     this.isRunning = true;
 
-    // Create a simple beat grid starting now
-    const now = performance.now();
-    this.setBeatGrid({
-      bpm,
-      anchorPerformanceMs: now,
-      beatIndexAtAnchor: 0
-    });
+    // If no synchronized grid was set, start from local time.
+    if (!this.beatGrid) {
+      const now = performance.now();
+      this.setBeatGrid({
+        bpm,
+        anchorPerformanceMs: now,
+        beatIndexAtAnchor: 0
+      });
+    } else if (this.beatGrid.bpm !== bpm) {
+      this.beatGrid = {
+        ...this.beatGrid,
+        bpm
+      };
+      this.nextScheduleTimeMs = performance.now();
+    }
 
     // Resume audio context (required for user interaction)
     audioContextManager.resume().then(() => {
@@ -145,6 +156,13 @@ export class Metronome {
    */
   getBPM(): number {
     return this.bpm;
+  }
+
+  /**
+   * Register callback for when beats are scheduled (for visual sync)
+   */
+  onBeatScheduled(callback: (beatIndex: number, isDownbeat: boolean, timeMs: number) => void): void {
+    this.onBeatScheduledCallback = callback;
   }
 
   /**
@@ -244,6 +262,21 @@ export class Metronome {
 
     // Track this source so we can cancel it if needed
     this.scheduledSources.push(source);
+
+    // Calculate when this beat will actually play (in performance.now() time)
+    const now = performance.now();
+    const contextNow = context.currentTime;
+    const playTimeMs = now + (audioContextTime - contextNow) * 1000;
+
+    // Schedule visual callback to trigger at the right time
+    if (this.onBeatScheduledCallback) {
+      const visualDelay = Math.max(0, playTimeMs - performance.now());
+      setTimeout(() => {
+        if (this.onBeatScheduledCallback) {
+          this.onBeatScheduledCallback(beatIndex, isDownbeat, playTimeMs);
+        }
+      }, visualDelay);
+    }
 
     // Remove from tracking when it finishes playing
     source.onended = () => {

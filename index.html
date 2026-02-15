@@ -70,9 +70,12 @@
           <p class="hint">Or scan this QR code</p>
         </div>
 
-        <button id="startMetronomeBtn" class="btn btn-success btn-large">
+        <button id="startMetronomeBtn" class="btn btn-success btn-large" disabled>
           Start Metronome
         </button>
+        <p class="hint" id="syncHint" style="margin-top: 12px; display: none;">
+          Waiting for peers to sync clocks...
+        </p>
 
         <div id="leaderStatus" class="status"></div>
       </div>
@@ -125,6 +128,11 @@
       <div class="tempo-display">
         <div class="tempo-value" id="tempoValue">120</div>
         <div class="tempo-label">BPM</div>
+      </div>
+
+      <div class="countdown-display" id="countdownDisplay" style="display: none;">
+        <div class="countdown-value" id="countdownValue">3</div>
+        <div class="countdown-label">Starting in...</div>
       </div>
 
       <div class="playback-controls" id="leaderControls" style="display: none;">
@@ -210,6 +218,17 @@
             });
           }
 
+          // Enable start button after waiting for peers to sync (2 seconds minimum)
+          const startBtn = document.getElementById('startMetronomeBtn');
+          const syncHint = document.getElementById('syncHint');
+          if (startBtn && syncHint) {
+            syncHint.style.display = 'block';
+            setTimeout(() => {
+              startBtn.disabled = false;
+              syncHint.style.display = 'none';
+            }, 2000);
+          }
+
         } catch (err) {
           console.error('Failed to create room:', err);
           alert('Failed to create room');
@@ -231,6 +250,9 @@
 
         // Setup playing view
         setupPlayingView();
+
+        // Show countdown
+        showCountdown(3); // 3 second countdown
       });
     }
 
@@ -259,12 +281,12 @@
           await peer.joinRoom(roomId, app.getIceConfig());
           setText(peerStatus, 'Connected! Waiting for session to start...');
 
-          // When metronome starts, show playing view
-          // (In production, this would be triggered by start_announce)
-          setTimeout(() => {
+          // Register callback for when leader starts the metronome
+          peer.onStart(() => {
+            console.log('🎵 Peer: Starting metronome');
             app.showPlayingView();
             setupPlayingView();
-          }, 2000);
+          });
 
         } catch (err) {
           console.error('Failed to join room:', err);
@@ -292,6 +314,9 @@
           tempoValue.textContent = leader.getBPM().toString();
           show(leaderControls);
           hide(peerControls);
+
+          // Register beat callback for visual sync
+          setupBeatVisualSync(leader);
         }
       } else if (role === 'peer') {
         const peer = app.getPeerMachine();
@@ -300,40 +325,31 @@
           playingRole.textContent = 'Peer';
           show(peerControls);
           hide(leaderControls);
+
+          // Register beat callback for visual sync
+          setupBeatVisualSync(peer);
         }
       }
-
-      // Start beat indicator animation
-      startBeatAnimation();
     }
 
-    // Beat animation
-    let beatInterval = null;
-    let beatCount = 0;
-
-    function startBeatAnimation() {
+    // Setup visual sync with metronome beats
+    function setupBeatVisualSync(machine) {
       const beatIndicator = document.getElementById('beatIndicator');
-      const role = app.getRole();
-      const bpm = role === 'leader'
-        ? app.getLeaderMachine()?.getBPM()
-        : 120; // Default for peer
+      if (!beatIndicator) return;
 
-      if (!bpm) return;
+      // Get metronome instance and register beat callback
+      const metronome = machine.getMetronome();
+      if (!metronome) return;
 
-      const intervalMs = 60000 / bpm;
-
-      beatInterval = setInterval(() => {
-        if (beatIndicator) {
-          const isDownbeat = (beatCount % 4) === 0;
-          beatIndicator.classList.remove('flash', 'downbeat');
-          void beatIndicator.offsetWidth; // Force reflow
-          beatIndicator.classList.add('flash');
-          if (isDownbeat) {
-            beatIndicator.classList.add('downbeat');
-          }
-          beatCount++;
+      metronome.onBeatScheduled((beatIndex, isDownbeat, timeMs) => {
+        // Flash the indicator in sync with audio
+        beatIndicator.classList.remove('flash', 'downbeat');
+        void beatIndicator.offsetWidth; // Force reflow
+        beatIndicator.classList.add('flash');
+        if (isDownbeat) {
+          beatIndicator.classList.add('downbeat');
         }
-      }, intervalMs);
+      });
     }
 
     // Stop metronome button
@@ -344,9 +360,6 @@
         if (leader) {
           leader.stopMetronome();
           await leader.closeRoom();
-        }
-        if (beatInterval) {
-          clearInterval(beatInterval);
         }
         window.location.reload();
       });
@@ -360,11 +373,35 @@
         if (peer) {
           await peer.leaveRoom();
         }
-        if (beatInterval) {
-          clearInterval(beatInterval);
-        }
         window.location.reload();
       });
+    }
+
+    // Countdown display
+    function showCountdown(seconds) {
+      const countdownDisplay = document.getElementById('countdownDisplay');
+      const countdownValue = document.getElementById('countdownValue');
+      const beatDisplay = document.getElementById('beatIndicator')?.parentElement;
+
+      if (!countdownDisplay || !countdownValue) return;
+
+      // Hide beat display, show countdown
+      if (beatDisplay) beatDisplay.style.display = 'none';
+      countdownDisplay.style.display = 'block';
+
+      let remaining = seconds;
+      countdownValue.textContent = remaining.toString();
+
+      const countdownInterval = setInterval(() => {
+        remaining--;
+        if (remaining > 0) {
+          countdownValue.textContent = remaining.toString();
+        } else {
+          clearInterval(countdownInterval);
+          countdownDisplay.style.display = 'none';
+          if (beatDisplay) beatDisplay.style.display = 'flex';
+        }
+      }, 1000);
     }
 
     console.log('🎵 Pulse Link loaded');
