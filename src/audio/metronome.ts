@@ -30,6 +30,9 @@ export class Metronome {
   private nextBeatIndex: number = 0;
   private nextScheduleTimeMs: number = 0;
 
+  // Track scheduled audio sources so we can cancel them
+  private scheduledSources: AudioBufferSourceNode[] = [];
+
   constructor() {}
 
   /**
@@ -86,21 +89,47 @@ export class Metronome {
       clearInterval(this.schedulerIntervalId);
       this.schedulerIntervalId = null;
     }
+
+    // Stop all scheduled audio sources immediately
+    this.clearScheduledSounds();
   }
 
   /**
-   * Update BPM (for future: smooth tempo changes)
+   * Update BPM (clears schedule and restarts)
    */
   setBPM(bpm: number): void {
     if (this.bpm === bpm) {
       return;
     }
 
-    // For V1, simple update (no smooth transition)
+    const wasRunning = this.isRunning;
+
+    // Stop all scheduled sounds
+    this.clearScheduledSounds();
+
+    // Update BPM
     this.bpm = bpm;
 
-    if (this.beatGrid) {
-      this.beatGrid.bpm = bpm;
+    if (wasRunning && this.beatGrid) {
+      // Recalculate beat grid with new BPM from current position
+      const now = performance.now();
+      const msPerBeatOld = 60000 / this.beatGrid.bpm;
+      const elapsedMs = now - this.beatGrid.anchorPerformanceMs;
+      const currentBeatIndex = this.beatGrid.beatIndexAtAnchor + Math.floor(elapsedMs / msPerBeatOld);
+
+      // Create new beat grid at current beat with new BPM
+      this.beatGrid = {
+        bpm,
+        anchorPerformanceMs: now,
+        beatIndexAtAnchor: currentBeatIndex
+      };
+
+      // Reset next beat to schedule
+      this.nextBeatIndex = currentBeatIndex;
+      this.nextScheduleTimeMs = now;
+
+      // Reschedule immediately
+      this.scheduleAhead();
     }
   }
 
@@ -213,7 +242,36 @@ export class Metronome {
     source.connect(gainNode);
     gainNode.connect(context.destination);
 
+    // Track this source so we can cancel it if needed
+    this.scheduledSources.push(source);
+
+    // Remove from tracking when it finishes playing
+    source.onended = () => {
+      const index = this.scheduledSources.indexOf(source);
+      if (index > -1) {
+        this.scheduledSources.splice(index, 1);
+      }
+    };
+
     // Schedule playback
     source.start(audioContextTime);
+  }
+
+  /**
+   * Clear all scheduled sounds (called on stop or BPM change)
+   */
+  private clearScheduledSounds(): void {
+    // Stop all scheduled sources
+    for (const source of this.scheduledSources) {
+      try {
+        source.stop();
+        source.disconnect();
+      } catch (err) {
+        // Source may have already finished or been stopped
+      }
+    }
+
+    // Clear the array
+    this.scheduledSources = [];
   }
 }
