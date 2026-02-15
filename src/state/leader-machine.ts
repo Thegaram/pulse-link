@@ -3,37 +3,42 @@
  * Manages room creation, peer connections, and metronome synchronization
  */
 
-import { LeaderConnectionManager } from '../webrtc/leader.js';
-import { MockSignaling } from '../signaling/mock.js';
 import { RoomStateManager } from './room-state.js';
 import { Metronome } from '../audio/metronome.js';
 import { LeaderState } from './types.js';
+import { LeaderConnectionManagerLike } from '../realtime/connection-types.js';
+import { TransportRuntime, createDefaultTransportRuntime } from '../realtime/runtime.js';
 import {
   generateRoomId,
   createMessage,
-  MessageType,
   StartAnnouncePayload,
   ParamUpdatePayload,
   TimePingPayload,
   TimePongPayload
 } from '../types.js';
-import { IceConfig } from '../webrtc/types.js';
 import { ClockSync } from '../sync/clock.js';
 
 const PING_INTERVAL_MS = 1000; // Send time ping every 1 second
-type ControlMessageType = MessageType | 'clock_offset';
+const STALE_PEER_TTL_MS = 6000;
+const STALE_PEER_SWEEP_MS = 1000;
+const BPM_CHANGE_LEAD_MS = 300;
+type ControlMessageType = 'start_announce' | 'stop_announce' | 'param_update' | 'clock_offset' | 'room_closed';
 
 export class LeaderStateMachine {
   private state: LeaderState = 'L_IDLE';
   private roomState: RoomStateManager | null = null;
-  private connectionManager: LeaderConnectionManager | null = null;
+  private connectionManager: LeaderConnectionManagerLike | null = null;
   private metronome: Metronome;
   private myId: string;
   private pingIntervals: Map<string, number> = new Map();
   private pingSeq: Map<string, number> = new Map();
   private clockSyncs: Map<string, ClockSync> = new Map();
+  private staleSweepIntervalId: number | null = null;
 
-  constructor(myId: string) {
+  constructor(
+    myId: string,
+    private readonly transportRuntime: TransportRuntime = createDefaultTransportRuntime('pubsub')
+  ) {
     this.myId = myId;
     this.metronome = new Metronome();
   }
@@ -49,7 +54,7 @@ export class LeaderStateMachine {
   /**
    * Create room and open for peers
    */
-  async createRoom(bpm: number, iceConfig: IceConfig, preferredRoomId?: string): Promise<string> {
+  async createRoom(bpm: number, preferredRoomId?: string): Promise<string> {
     if (this.state !== 'L_IDLE') {
       throw new Error('Room already exists');
     }
@@ -57,17 +62,10 @@ export class LeaderStateMachine {
     const roomId = preferredRoomId ?? generateRoomId();
     this.roomState = new RoomStateManager(roomId, this.myId, bpm);
 
-    // Create signaling
-    const signaling = new MockSignaling();
+    const signaling = this.transportRuntime.createSignaling();
     await signaling.connect(roomId, this.myId);
 
-    // Create connection manager
-    this.connectionManager = new LeaderConnectionManager(
-      roomId,
-      this.myId,
-      signaling,
-      iceConfig
-    );
+    this.connectionManager = this.transportRuntime.createLeaderConnection(roomId, this.myId, signaling);
 
     // Handle control messages from peers (if needed)
     this.connectionManager.onControl((data) => {
@@ -96,6 +94,8 @@ export class LeaderStateMachine {
       this.roomState?.removePeer(peerId);
       this.stopTimeSyncWithPeer(peerId);
     });
+
+    this.startStalePeerSweep();
 
     this.state = 'L_ROOM_OPEN';
     console.log(`✅ Leader created room: ${roomId} at ${bpm} BPM`);
@@ -167,6 +167,8 @@ export class LeaderStateMachine {
       t4
     );
 
+    this.roomState?.markPeerConnected(peerId);
+
     // Send offset to peer via control channel
     this.sendControlToPeer(peerId, 'clock_offset', {
       offsetMs: stats.offsetMs,
@@ -187,6 +189,32 @@ export class LeaderStateMachine {
     }
     this.pingSeq.delete(peerId);
     this.clockSyncs.delete(peerId);
+  }
+
+  private startStalePeerSweep(): void {
+    if (this.staleSweepIntervalId !== null) {
+      clearInterval(this.staleSweepIntervalId);
+    }
+
+    this.staleSweepIntervalId = window.setInterval(() => {
+      if (!this.roomState) {
+        return;
+      }
+
+      const stalePeerIds = this.roomState.getStalePeerIds(STALE_PEER_TTL_MS);
+      for (const peerId of stalePeerIds) {
+        console.log(`⌛ Peer stale timeout: ${peerId}`);
+        this.roomState.removePeer(peerId);
+        this.stopTimeSyncWithPeer(peerId);
+      }
+    }, STALE_PEER_SWEEP_MS);
+  }
+
+  private stopStalePeerSweep(): void {
+    if (this.staleSweepIntervalId !== null) {
+      clearInterval(this.staleSweepIntervalId);
+      this.staleSweepIntervalId = null;
+    }
   }
 
   /**
@@ -297,26 +325,41 @@ export class LeaderStateMachine {
     const running = this.state === 'L_RUNNING' && previousStartAtLeaderMs !== undefined;
 
     if (running) {
-      // Preserve beat continuity at the current beat when changing tempo.
+      // Re-anchor tempo change to a shared future beat so all peers switch phase-aligned.
       const now = performance.now();
       const msPerBeatOld = 60000 / previous.bpm;
       const baseBeatIndex = previous.beatIndexAtAnchor ?? 0;
       const elapsedMs = Math.max(0, now - previousStartAtLeaderMs);
-      const elapsedBeats = Math.floor(elapsedMs / msPerBeatOld);
-      const currentBeatIndex = baseBeatIndex + elapsedBeats;
+      const beatsSinceAnchor = Math.floor(elapsedMs / msPerBeatOld);
+      const currentBeatIndex = baseBeatIndex + beatsSinceAnchor;
+      const currentBeatTime = previousStartAtLeaderMs + (currentBeatIndex - baseBeatIndex) * msPerBeatOld;
+      const leadRemainingMs = Math.max(0, BPM_CHANGE_LEAD_MS - (now - currentBeatTime));
+      const beatsAhead = Math.max(1, Math.ceil(leadRemainingMs / msPerBeatOld));
+      const changeBeatIndex = currentBeatIndex + beatsAhead;
+      const changeAtLeaderMs = previousStartAtLeaderMs + (changeBeatIndex - baseBeatIndex) * msPerBeatOld;
 
-      // Update leader's local tempo smoothly.
-      this.metronome.setBPM(bpm);
+      this.roomState.setBeatAnchor(changeAtLeaderMs, changeBeatIndex);
 
-      // Store new anchor for late joiners so they align with the current phase.
-      this.roomState.setBeatAnchor(now, currentBeatIndex);
+      this.metronome.setBeatGrid({
+        bpm,
+        anchorPerformanceMs: changeAtLeaderMs,
+        beatIndexAtAnchor: changeBeatIndex
+      });
+
+      const announcement: StartAnnouncePayload = {
+        bpm,
+        version: state.version,
+        anchorLeaderMs: changeAtLeaderMs,
+        beatIndexAtAnchor: changeBeatIndex
+      };
+      this.broadcastControl('start_announce', announcement);
+      return;
     }
 
     const update: ParamUpdatePayload = {
       bpm,
       version: state.version
     };
-
     this.broadcastControl('param_update', update);
   }
 
@@ -332,6 +375,7 @@ export class LeaderStateMachine {
 
     // Stop metronome
     this.metronome.stop();
+    this.stopStalePeerSweep();
 
     // Notify peers
     if (this.connectionManager && this.roomState) {

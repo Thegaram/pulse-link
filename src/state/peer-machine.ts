@@ -3,20 +3,19 @@
  * Manages joining room, syncing clock, and playing synchronized metronome
  */
 
-import { PeerConnectionManager } from '../webrtc/peer.js';
-import { MockSignaling } from '../signaling/mock.js';
 import { ClockSync } from '../sync/clock.js';
 import { Metronome } from '../audio/metronome.js';
 import { PeerState } from './types.js';
-import { StartAnnouncePayload, ParamUpdatePayload, TimePingPayload, TimePongPayload } from '../types.js';
-import { IceConfig } from '../webrtc/types.js';
+import { StartAnnouncePayload, ParamUpdatePayload, TimePingPayload, TimePongPayload, ClockOffsetPayload } from '../types.js';
+import { PeerConnectionManagerLike } from '../realtime/connection-types.js';
+import { TransportRuntime, createDefaultTransportRuntime } from '../realtime/runtime.js';
 
 const MIN_OFFSET_SAMPLES_FOR_START = 2;
 const PEER_SYNC_DELAY_MS = 250;
 
 export class PeerStateMachine {
   private state: PeerState = 'C_IDLE';
-  private connectionManager: PeerConnectionManager | null = null;
+  private connectionManager: PeerConnectionManagerLike | null = null;
   private clockSync: ClockSync;
   private metronome: Metronome;
   private myId: string;
@@ -28,7 +27,10 @@ export class PeerStateMachine {
   private pendingStartAnnouncement: StartAnnouncePayload | null = null;
   private pendingStartTimeoutId: number | null = null;
 
-  constructor(myId: string) {
+  constructor(
+    myId: string,
+    private readonly transportRuntime: TransportRuntime = createDefaultTransportRuntime('pubsub')
+  ) {
     this.myId = myId;
     this.clockSync = new ClockSync();
     this.metronome = new Metronome();
@@ -45,7 +47,7 @@ export class PeerStateMachine {
   /**
    * Join room
    */
-  async joinRoom(roomId: string, iceConfig: IceConfig): Promise<void> {
+  async joinRoom(roomId: string): Promise<void> {
     if (this.state !== 'C_IDLE') {
       throw new Error('Already in a room');
     }
@@ -53,17 +55,10 @@ export class PeerStateMachine {
     this.roomId = roomId;
     this.state = 'C_DISCOVERING';
 
-    // Create signaling
-    const signaling = new MockSignaling();
+    const signaling = this.transportRuntime.createSignaling();
     await signaling.connect(roomId, this.myId);
 
-    // Create connection manager
-    this.connectionManager = new PeerConnectionManager(
-      roomId,
-      this.myId,
-      signaling,
-      iceConfig
-    );
+    this.connectionManager = this.transportRuntime.createPeerConnection(roomId, this.myId, signaling);
 
     this.state = 'C_SIGNALING';
 
@@ -126,7 +121,7 @@ export class PeerStateMachine {
   /**
    * Handle clock offset update from leader
    */
-  private handleClockOffset(payload: { offsetMs: number; rtt: number }): void {
+  private handleClockOffset(payload: ClockOffsetPayload): void {
     console.log(`⏱️ Clock offset update: ${payload.offsetMs.toFixed(2)}ms (RTT: ${payload.rtt.toFixed(2)}ms)`);
 
     // Apply leader-calculated offset directly.
@@ -212,8 +207,9 @@ export class PeerStateMachine {
       return;
     }
 
-    // Apply immediately if we're already running; otherwise cache for next start.
-    if (this.state === 'C_RUNNING') {
+    // Running tempo changes are phase-anchored via start_announce.
+    // Apply param updates only while not actively running.
+    if (this.state !== 'C_RUNNING') {
       this.metronome.setBPM(payload.bpm);
     }
   }

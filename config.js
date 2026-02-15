@@ -1,12 +1,19 @@
 /**
  * Configuration for Pulse Link
- * Supabase and ICE server settings
+ * Transport and signaling settings
  */
 
 export const SUPABASE_CONFIG = {
   // Replace with your Supabase project credentials
-  url: 'https://YOUR_PROJECT.supabase.co',
-  anonKey: 'YOUR_ANON_KEY'
+  url: '',
+  anonKey: ''
+};
+
+export const ABLY_CONFIG = {
+  // Use either key (server-side/trusted only) or token for browser clients
+  key: '',
+  token: '',
+  clientId: ''
 };
 
 export const ICE_CONFIG = {
@@ -19,5 +26,13 @@ export const ICE_CONFIG = {
   rtcpMuxPolicy: 'require'
 };
 
-// For local testing without Supabase, use a mock signaling transport
-export const USE_MOCK_SIGNALING = true;
+// Runtime transport mode:
+// - 'pubsub': managed realtime messaging path (recommended)
+// - 'webrtc': legacy P2P data channels
+export const TRANSPORT_MODE = 'pubsub';
+
+// Signaling backend used by selected transport runtime.
+// - 'mock': BroadcastChannel (local multi-tab)
+// - 'supabase': Supabase Realtime Broadcast
+// - 'ably': Ably Realtime channels
+export const SIGNALING_BACKEND = 'ably';

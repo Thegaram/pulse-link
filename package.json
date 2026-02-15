@@ -4,8 +4,10 @@
   "description": "P2P WebRTC synchronized metronome for musicians",
   "type": "module",
   "scripts": {
+    "prebuild": "node scripts/generate-local-config.mjs",
     "build": "tsc",
     "watch": "tsc --watch",
+    "preserve": "node scripts/generate-local-config.mjs",
     "serve": "python3 -m http.server 8000"
   },
   "keywords": ["metronome", "webrtc", "p2p", "music", "sync"],

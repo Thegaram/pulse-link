@@ -28,6 +28,19 @@ npx serve .
 # Open http://localhost:8000
 ```
 
+### Transport Mode
+- Configure runtime transport in `config.js`.
+- Default is `TRANSPORT_MODE = 'pubsub'` with `SIGNALING_BACKEND = 'mock'` for local multi-tab testing.
+- To use managed Supabase pub/sub, set `SIGNALING_BACKEND = 'supabase'` and fill `SUPABASE_CONFIG`.
+- To use managed Ably pub/sub, set `SIGNALING_BACKEND = 'ably'` and fill `ABLY_CONFIG`.
+- SDK loading for Supabase/Ably is handled in `index.html` based on backend choice.
+
+### Local Secrets
+- Keep committed `config.js` generic; put local keys/tokens in `.env` (ignored by git).
+- Running `npm run build` or `npm run serve` automatically generates `config.local.json` from `.env`.
+- `config.local.json` is ignored by git and auto-loaded by `index.html` at runtime.
+- Template env file: `.env.example`.
+
 ### Deployment
 - Commit to `main` branch
 - GitHub Pages serves from root or `/docs` folder

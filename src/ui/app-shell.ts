@@ -2,9 +2,11 @@ import { LeaderStateMachine } from '../state/leader-machine.js';
 import { PeerStateMachine } from '../state/peer-machine.js';
 import { generatePeerId } from '../types.js';
 import { IceConfig } from '../webrtc/types.js';
+import { createSignalingTransport, SignalingOptions } from '../signaling/factory.js';
 import { flashBeat } from './dom.js';
 import { getAppShellRefs } from './app-shell-refs.js';
 import { BPM_UPDATE_DEBOUNCE_MS, HOST_ROOM_STORAGE_KEY, MAX_BPM, MIN_BPM, Mode } from './app-shell-constants.js';
+import { createTransportRuntime, TransportMode, TransportRuntime } from '../realtime/runtime.js';
 
 declare const QRCode: {
   new (element: HTMLElement, options: {
@@ -17,11 +19,17 @@ declare const QRCode: {
 };
 
 interface AppShellConfig {
-  iceConfig: IceConfig;
+  iceConfig?: IceConfig;
+  transportMode: TransportMode;
+  signaling: SignalingOptions;
   appVersion: string;
 }
 
+type BackendStatusState = 'idle' | 'connecting' | 'ok' | 'error';
+
 class AppShellController {
+  private static readonly JOIN_HOST_TIMEOUT_MS = 7000;
+
   private leader: LeaderStateMachine | null = null;
   private peer: PeerStateMachine | null = null;
 
@@ -30,6 +38,7 @@ class AppShellController {
   private activeTab: Mode = 'host';
 
   private joinBpmTimer: number | null = null;
+  private joinHostTimeoutId: number | null = null;
   private hostStatusTimer: number | null = null;
   private bpmHoldIntervalId: number | null = null;
   private bpmHoldStartTimeoutId: number | null = null;
@@ -39,6 +48,7 @@ class AppShellController {
   private hostStatusOverrideText = '';
   private suppressPointerClickUntil = 0;
   private joinInProgress = false;
+  private clearJoinCodeOnNextEntry = false;
   private readonly refs = getAppShellRefs();
 
   private readonly hostTabBtn = this.refs.hostTabBtn;
@@ -72,14 +82,24 @@ class AppShellController {
   private readonly qrModal = this.refs.qrModal;
   private readonly qrNode = this.refs.qrNode;
   private readonly closeQrBtn = this.refs.closeQrBtn;
+  private readonly backendStatus = this.refs.backendStatus;
+  private readonly backendStatusText = this.refs.backendStatusText;
   private readonly appVersion = this.refs.appVersion;
+  private readonly transportRuntime: TransportRuntime;
 
-  constructor(private readonly config: AppShellConfig) {}
+  constructor(private readonly config: AppShellConfig) {
+    this.transportRuntime = createTransportRuntime({
+      mode: config.transportMode,
+      iceConfig: config.iceConfig,
+      createSignaling: () => createSignalingTransport(config.signaling)
+    });
+  }
 
   init(): void {
     this.bindEvents();
 
     this.applyHostBpm(this.currentBpm);
+    this.setBackendStatus('idle');
     this.appVersion.textContent = this.config.appVersion;
     this.renderJoinCodeVisual();
 
@@ -97,7 +117,41 @@ class AppShellController {
     this.ensureHostRoom().catch((error) => {
       console.error(error);
       this.hostStatus.textContent = 'Connected peers: 0';
+      this.setBackendStatus('error', this.errorText(error));
     });
+  }
+
+  private backendLabel(): string {
+    if (this.config.signaling.backend === 'mock') {
+      return 'Local';
+    }
+    if (this.config.signaling.backend === 'supabase') {
+      return 'Supabase';
+    }
+    return 'Ably';
+  }
+
+  private errorText(error: unknown): string {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return 'Connection error';
+  }
+
+  private setBackendStatus(state: BackendStatusState, detail?: string): void {
+    const label = this.backendLabel();
+    this.backendStatus.classList.remove('state-idle', 'state-connecting', 'state-ok', 'state-error');
+    this.backendStatus.classList.add(`state-${state}`);
+
+    let suffix = '';
+    if (state === 'connecting') {
+      suffix = ' connecting';
+    } else if (state === 'error') {
+      suffix = ' error';
+    }
+
+    this.backendStatusText.textContent = `${label}${suffix}`;
+    this.backendStatus.title = detail ?? '';
   }
 
   private bindEvents(): void {
@@ -157,9 +211,38 @@ class AppShellController {
       this.maybeAutoJoin();
     });
 
+    this.joinCodeInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        this.maybeAutoJoin();
+        return;
+      }
+
+      if (!this.clearJoinCodeOnNextEntry) {
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      const printable = event.key.length === 1;
+      if (printable) {
+        this.setJoinCode('');
+        this.clearJoinCodeOnNextEntry = false;
+        return;
+      }
+
+      if (event.key === 'Backspace' || event.key === 'Delete') {
+        this.setJoinCode('');
+        this.clearJoinCodeOnNextEntry = false;
+        event.preventDefault();
+      }
+    });
+
     this.joinCodeInput.addEventListener('paste', (event) => {
       event.preventDefault();
       const pasted = (event.clipboardData?.getData('text') ?? '').toUpperCase();
+      this.clearJoinCodeOnNextEntry = false;
       this.setJoinCode(pasted);
       this.maybeAutoJoin();
     });
@@ -174,6 +257,7 @@ class AppShellController {
       console.error(error);
       this.stopHostStatusTimer();
       this.hostStatus.textContent = 'Connected peers: 0';
+      this.setBackendStatus('error', this.errorText(error));
     });
   }
 
@@ -185,6 +269,7 @@ class AppShellController {
     this.switchToJoin().catch((error) => {
       console.error(error);
       this.setJoinStatus('Failed to open join mode.');
+      this.setBackendStatus('error', this.errorText(error));
     });
   }
 
@@ -383,13 +468,25 @@ class AppShellController {
     }
   }
 
+  private clearJoinHostTimeout(): void {
+    if (this.joinHostTimeoutId !== null) {
+      clearTimeout(this.joinHostTimeoutId);
+      this.joinHostTimeoutId = null;
+    }
+  }
+
   private showJoinEntry(): void {
     this.joinEntry.classList.remove('hidden');
     this.joinLive.classList.add('hidden');
     this.clearJoinTimer();
+    this.clearJoinHostTimeout();
     this.joinInProgress = false;
     this.setJoinInputDisabled(false);
     this.joinCodeInput.focus();
+  }
+
+  private enableJoinCodeReplaceOnNextEntry(): void {
+    this.clearJoinCodeOnNextEntry = true;
   }
 
   private showJoinLive(): void {
@@ -413,17 +510,20 @@ class AppShellController {
   private async ensureHostRoom(forceNewCode = false): Promise<void> {
     if (this.leader) {
       this.updateHostControls();
+      this.setBackendStatus('ok');
       return;
     }
 
-    this.leader = new LeaderStateMachine(generatePeerId());
+    this.setBackendStatus('connecting');
+    this.leader = new LeaderStateMachine(generatePeerId(), this.transportRuntime);
     this.leader.getMetronome().onBeatScheduled((_, isDownbeat) => {
       flashBeat(this.hostBeat, isDownbeat);
     });
 
     const preferredRoomId = forceNewCode ? undefined : this.loadStoredHostRoomCode();
-    const roomId = await this.leader.createRoom(this.currentBpm, this.config.iceConfig, preferredRoomId ?? undefined);
+    const roomId = await this.leader.createRoom(this.currentBpm, preferredRoomId ?? undefined);
     this.setHostRoomCode(roomId);
+    this.setBackendStatus('ok');
     this.startHostStatusTimer();
     this.updateHostControls();
   }
@@ -459,6 +559,7 @@ class AppShellController {
     this.stopHostStatusTimer();
     this.refreshHostStatus();
     this.updateHostControls();
+    this.setBackendStatus('idle');
   }
 
   private async teardownPeer(): Promise<void> {
@@ -471,6 +572,7 @@ class AppShellController {
     this.clearJoinTimer();
     this.showJoinEntry();
     this.setJoinStatus('Enter a room code to join.');
+    this.setBackendStatus('idle');
   }
 
   private async switchToHost(): Promise<void> {
@@ -482,21 +584,26 @@ class AppShellController {
   private async switchToJoin(): Promise<void> {
     await this.teardownHost();
     this.activateTab('join');
+    this.setJoinStatus('Enter a room code to join.');
+    this.enableJoinCodeReplaceOnNextEntry();
     this.showJoinEntry();
   }
 
   private async joinRoom(roomId: string): Promise<void> {
     await this.teardownPeer();
     this.setJoinStatus('Joining room...');
+    this.setBackendStatus('connecting');
+    this.clearJoinHostTimeout();
     this.joinInProgress = true;
     this.setJoinInputDisabled(true);
 
-    this.peer = new PeerStateMachine(generatePeerId());
+    this.peer = new PeerStateMachine(generatePeerId(), this.transportRuntime);
     this.peer.getMetronome().onBeatScheduled((_, isDownbeat) => {
       flashBeat(this.joinBeat, isDownbeat);
     });
 
     this.peer.onStart(() => {
+      this.clearJoinHostTimeout();
       this.showJoinLive();
       this.setJoinLiveStatus('Running.');
 
@@ -510,13 +617,36 @@ class AppShellController {
     });
 
     this.peer.onSyncStatus((status) => {
+      this.clearJoinHostTimeout();
+      this.setBackendStatus('ok');
       this.showJoinLive();
       this.setJoinLiveStatus(status);
     });
 
-    await this.peer.joinRoom(roomId, this.config.iceConfig);
-    this.showJoinLive();
-    this.setJoinLiveStatus('Connected. Waiting for host to start.');
+    await this.peer.joinRoom(roomId);
+    this.setJoinStatus('Waiting for host...');
+    this.joinHostTimeoutId = window.setTimeout(() => {
+      if (!this.peer) {
+        return;
+      }
+
+      const state = this.peer.getState();
+      if (state === 'C_DISCOVERING' || state === 'C_SIGNALING') {
+        this.teardownPeer()
+          .then(() => {
+            this.setJoinStatus('Host not found. Try another code.');
+            this.enableJoinCodeReplaceOnNextEntry();
+            this.setBackendStatus('error', 'No host responded for this room code');
+          })
+          .catch((error) => {
+            console.error(error);
+            this.setJoinStatus('Host not found. Try another code.');
+            this.enableJoinCodeReplaceOnNextEntry();
+            this.setBackendStatus('error', this.errorText(error));
+          });
+      }
+    }, AppShellController.JOIN_HOST_TIMEOUT_MS);
+
     this.joinInProgress = false;
   }
 
@@ -535,7 +665,9 @@ class AppShellController {
       this.joinInProgress = false;
       this.setJoinInputDisabled(false);
       this.setJoinStatus('Join failed. Try another code.');
+      this.enableJoinCodeReplaceOnNextEntry();
       this.showJoinEntry();
+      this.setBackendStatus('error', this.errorText(error));
     });
   }
 

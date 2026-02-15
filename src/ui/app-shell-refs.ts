@@ -32,6 +32,8 @@ export interface AppShellRefs {
   qrModal: HTMLElement;
   qrNode: HTMLElement;
   closeQrBtn: HTMLButtonElement;
+  backendStatus: HTMLElement;
+  backendStatusText: HTMLElement;
   appVersion: HTMLElement;
 }
 
@@ -68,6 +70,8 @@ export function getAppShellRefs(): AppShellRefs {
     qrModal: byId('qrModal'),
     qrNode: byId('qrcode'),
     closeQrBtn: byId('closeQrBtn'),
+    backendStatus: byId('backendStatus'),
+    backendStatusText: byId('backendStatusText'),
     appVersion: byId('appVersion')
   };
 }

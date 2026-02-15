@@ -37,6 +37,13 @@ body {
   width: min(460px, 100%);
 }
 
+.meta-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
 .app {
   width: 100%;
   background: var(--card);
@@ -52,6 +59,50 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   letter-spacing: 0.4px;
   user-select: text;
+  line-height: 1;
+}
+
+.backend-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #9aa5b5;
+  letter-spacing: 0.3px;
+  user-select: none;
+  line-height: 1;
+}
+
+.backend-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.35);
+}
+
+.backend-status.state-connecting {
+  color: #b08900;
+}
+
+.backend-status.state-connecting .dot {
+  background: #f59e0b;
+}
+
+.backend-status.state-ok {
+  color: #5f768a;
+}
+
+.backend-status.state-ok .dot {
+  background: #10b981;
+}
+
+.backend-status.state-error {
+  color: #9f1239;
+}
+
+.backend-status.state-error .dot {
+  background: #ef4444;
 }
 
 .tabs {

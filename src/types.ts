@@ -19,6 +19,7 @@ export interface Message {
 export type MessageType =
   // Signaling messages (Supabase Realtime)
   | "join"
+  | "peer_bye"
   | "leader_hello"
   | "offer"
   | "answer"
@@ -27,6 +28,7 @@ export type MessageType =
   | "start_announce"
   | "stop_announce"
   | "param_update"
+  | "clock_offset"
   | "room_closed"
   // Time sync channel messages (WebRTC DataChannel)
   | "time_ping"
@@ -82,6 +84,14 @@ export interface StartAnnouncePayload {
 export interface ParamUpdatePayload {
   bpm?: number;
   version: number;
+}
+
+/**
+ * Payload for clock offset update (leader -> peer)
+ */
+export interface ClockOffsetPayload {
+  offsetMs: number;
+  rtt: number;
 }
 
 /**

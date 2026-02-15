@@ -25,6 +25,7 @@ export class SupabaseSignaling implements SignalingTransport {
   private connected: boolean = false;
   private roomId: string = '';
   private clientId: string = '';
+  private readyPromise: Promise<void> | null = null;
 
   constructor(private config: SupabaseConfig) {}
 
@@ -51,16 +52,36 @@ export class SupabaseSignaling implements SignalingTransport {
       this.handleIncomingMessage(payload.payload);
     });
 
-    // Subscribe to channel
-    await this.channel.subscribe((status: string) => {
-      if (status === 'SUBSCRIBED') {
-        this.connected = true;
-        console.log(`✅ Connected to signaling channel: ${channelName}`);
-      }
+    // Subscribe to channel and wait until SUBSCRIBED before resolving connect().
+    this.readyPromise = new Promise<void>((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        reject(new Error('Supabase signaling subscribe timeout'));
+      }, 8000);
+
+      this.channel.subscribe((status: string) => {
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(timeoutId);
+          this.connected = true;
+          console.log(`✅ Connected to signaling channel: ${channelName}`);
+          resolve();
+          return;
+        }
+
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          clearTimeout(timeoutId);
+          reject(new Error(`Supabase signaling subscribe failed: ${status}`));
+        }
+      });
     });
+
+    await this.readyPromise;
   }
 
   async send(message: Message): Promise<void> {
+    if (this.readyPromise) {
+      await this.readyPromise;
+    }
+
     if (!this.connected || !this.channel) {
       throw new Error('Not connected to signaling server');
     }
@@ -84,6 +105,7 @@ export class SupabaseSignaling implements SignalingTransport {
     }
 
     this.connected = false;
+    this.readyPromise = null;
     console.log('✅ Disconnected from signaling channel');
   }
 

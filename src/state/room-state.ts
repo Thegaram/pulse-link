@@ -100,4 +100,13 @@ export class RoomStateManager {
   getPeerCount(): number {
     return Object.keys(this.state.peers).length;
   }
+
+  /**
+   * Get peers that have not been seen within TTL.
+   */
+  getStalePeerIds(ttlMs: number, nowMs: number = performance.now()): string[] {
+    return Object.values(this.state.peers)
+      .filter((peer) => peer.status === 'connected' && (nowMs - peer.lastSeenMs) > ttlMs)
+      .map((peer) => peer.peerId);
+  }
 }
