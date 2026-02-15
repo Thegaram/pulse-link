@@ -239,7 +239,18 @@
 
     <!-- Test Info -->
     <div class="test-info">
-      <h3>Test Instructions:</h3>
+      <h3>⚠️ Chrome/Brave Setup Required:</h3>
+      <ul>
+        <li>Go to: <code>chrome://flags/#enable-webrtc-hide-local-ips-with-mdns</code></li>
+        <li>Set to: <strong>Disabled</strong></li>
+        <li>Restart browser</li>
+      </ul>
+      <p style="margin-top: 8px; font-size: 11px;">
+        Chrome's mDNS privacy feature prevents WebRTC connections between tabs on the same machine.
+        This is only needed for local testing; production deployments work normally.
+      </p>
+
+      <h3 style="margin-top: 16px;">Test Instructions:</h3>
       <ul>
         <li>Tab 1: Click "Create Room" → copy room code</li>
         <li>Tab 2: Enter room code → click "Join Room"</li>
@@ -300,6 +311,21 @@
       leaderManager.onControl((data) => {
         if (data.type === 'chat') {
           displayMessage(`Peer: ${data.text}`, 'received');
+        }
+      });
+
+      // Handle peer connections
+      leaderManager.onPeerConnected((peerId) => {
+        const peerCount = leaderManager.getConnectedPeers().length;
+        showStatus(leaderStatus, `✅ ${peerCount} peer(s) connected`, true);
+      });
+
+      leaderManager.onPeerDisconnected((peerId) => {
+        const peerCount = leaderManager.getConnectedPeers().length;
+        if (peerCount === 0) {
+          showStatus(leaderStatus, `Room created! Waiting for peers...`, true);
+        } else {
+          showStatus(leaderStatus, `✅ ${peerCount} peer(s) connected`, true);
         }
       });
 

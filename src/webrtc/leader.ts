@@ -22,6 +22,8 @@ export class LeaderConnectionManager {
 
   private onTimeSyncMessage: DataChannelMessageHandler | null = null;
   private onControlMessage: DataChannelMessageHandler | null = null;
+  private onPeerConnectedCallback: ((peerId: string) => void) | null = null;
+  private onPeerDisconnectedCallback: ((peerId: string) => void) | null = null;
 
   constructor(
     roomId: string,
@@ -105,7 +107,10 @@ export class LeaderConnectionManager {
     // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log(`🧊 ICE candidate (leader → ${peerId}):`, event.candidate.candidate);
         this.sendIceCandidate(peerId, event.candidate);
+      } else {
+        console.log(`🧊 ICE gathering complete for ${peerId}`);
       }
     };
 
@@ -116,6 +121,22 @@ export class LeaderConnectionManager {
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
         this.handlePeerDisconnect(peerId);
       }
+    };
+
+    // Track ICE connection state for debugging
+    pc.oniceconnectionstatechange = () => {
+      console.log(`🧊 ICE connection state (${peerId}): ${pc.iceConnectionState}`);
+
+      if (pc.iceConnectionState === 'failed') {
+        console.error(`❌ ICE connection failed for ${peerId}.`);
+        console.error(`💡 If testing in same browser tabs, disable Chrome mDNS:`);
+        console.error(`   chrome://flags/#enable-webrtc-hide-local-ips-with-mdns → Disabled`);
+      }
+    };
+
+    // Track ICE gathering state
+    pc.onicegatheringstatechange = () => {
+      console.log(`🧊 ICE gathering state (${peerId}): ${pc.iceGatheringState}`);
     };
 
     // Store peer connection
@@ -164,8 +185,11 @@ export class LeaderConnectionManager {
   private async handleIceCandidate(peerId: string, candidateData: any): Promise<void> {
     const peer = this.peers.get(peerId);
     if (!peer) {
+      console.warn(`⚠️ ICE candidate for unknown peer: ${peerId}`);
       return;
     }
+
+    console.log(`🧊 Received ICE candidate from ${peerId}:`, candidateData.candidate);
 
     const candidate = new RTCIceCandidate({
       candidate: candidateData.candidate,
@@ -173,7 +197,12 @@ export class LeaderConnectionManager {
       sdpMLineIndex: candidateData.sdpMLineIndex
     });
 
-    await peer.pc.addIceCandidate(candidate);
+    try {
+      await peer.pc.addIceCandidate(candidate);
+      console.log(`✅ Added ICE candidate for ${peerId}`);
+    } catch (err) {
+      console.error(`❌ Failed to add ICE candidate for ${peerId}:`, err);
+    }
   }
 
   /**
@@ -203,6 +232,11 @@ export class LeaderConnectionManager {
     if (peer) {
       peer.connected = true;
       console.log(`✅ Peer fully connected: ${peerId}`);
+
+      // Notify callback
+      if (this.onPeerConnectedCallback) {
+        this.onPeerConnectedCallback(peerId);
+      }
     }
   }
 
@@ -214,6 +248,11 @@ export class LeaderConnectionManager {
     const peer = this.peers.get(peerId);
     if (peer) {
       peer.connected = false;
+
+      // Notify callback
+      if (this.onPeerDisconnectedCallback) {
+        this.onPeerDisconnectedCallback(peerId);
+      }
     }
   }
 
@@ -247,6 +286,20 @@ export class LeaderConnectionManager {
    */
   onControl(handler: DataChannelMessageHandler): void {
     this.onControlMessage = handler;
+  }
+
+  /**
+   * Register callback for when a peer connects
+   */
+  onPeerConnected(callback: (peerId: string) => void): void {
+    this.onPeerConnectedCallback = callback;
+  }
+
+  /**
+   * Register callback for when a peer disconnects
+   */
+  onPeerDisconnected(callback: (peerId: string) => void): void {
+    this.onPeerDisconnectedCallback = callback;
   }
 
   /**

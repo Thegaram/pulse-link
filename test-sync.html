@@ -242,7 +242,17 @@
 
     <!-- Test Info -->
     <div class="test-info">
-      <h3>Test Instructions:</h3>
+      <h3>⚠️ Chrome/Brave Setup Required:</h3>
+      <ul>
+        <li>Go to: <code>chrome://flags/#enable-webrtc-hide-local-ips-with-mdns</code></li>
+        <li>Set to: <strong>Disabled</strong></li>
+        <li>Restart browser</li>
+      </ul>
+      <p style="margin-top: 8px; font-size: 11px;">
+        Required for WebRTC connections between tabs on the same machine.
+      </p>
+
+      <h3 style="margin-top: 16px;">Test Instructions:</h3>
       <ul>
         <li>Tab 1: Click "Create Room"</li>
         <li>Tab 2: Enter room code and "Join Room"</li>
@@ -319,12 +329,16 @@
         }
       });
 
-      // Handle control messages
-      leaderManager.onControl((data) => {
-        if (data.peerId && !connectedPeerId) {
-          connectedPeerId = data.peerId;
-          startPinging();
-        }
+      // Handle peer connection
+      leaderManager.onPeerConnected((peerId) => {
+        connectedPeerId = peerId;
+        showStatus(leaderStatus, `✅ Peer connected! Syncing clocks...`, true);
+        startPinging();
+      });
+
+      leaderManager.onPeerDisconnected((peerId) => {
+        showStatus(leaderStatus, `❌ Peer disconnected`, false);
+        connectedPeerId = null;
       });
 
       roomCode.textContent = currentRoomId;

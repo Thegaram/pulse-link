@@ -80,7 +80,10 @@ export class PeerConnectionManager {
     // Handle ICE candidates
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log(`🧊 ICE candidate (peer → leader):`, event.candidate.candidate);
         this.sendIceCandidate(event.candidate);
+      } else {
+        console.log(`🧊 ICE gathering complete`);
       }
     };
 
@@ -102,6 +105,22 @@ export class PeerConnectionManager {
       if (this.pc?.connectionState === 'disconnected' || this.pc?.connectionState === 'failed') {
         this.handleDisconnect();
       }
+    };
+
+    // Track ICE connection state for debugging
+    this.pc.oniceconnectionstatechange = () => {
+      console.log(`🧊 ICE connection state: ${this.pc?.iceConnectionState}`);
+
+      if (this.pc?.iceConnectionState === 'failed') {
+        console.error(`❌ ICE connection failed.`);
+        console.error(`💡 If testing in same browser tabs, disable Chrome mDNS:`);
+        console.error(`   chrome://flags/#enable-webrtc-hide-local-ips-with-mdns → Disabled`);
+      }
+    };
+
+    // Track ICE gathering state
+    this.pc.onicegatheringstatechange = () => {
+      console.log(`🧊 ICE gathering state: ${this.pc?.iceGatheringState}`);
     };
 
     // Set remote description (offer)
@@ -167,8 +186,11 @@ export class PeerConnectionManager {
    */
   private async handleIceCandidate(candidateData: any): Promise<void> {
     if (!this.pc) {
+      console.warn(`⚠️ ICE candidate received but no peer connection`);
       return;
     }
+
+    console.log(`🧊 Received ICE candidate from leader:`, candidateData.candidate);
 
     const candidate = new RTCIceCandidate({
       candidate: candidateData.candidate,
@@ -176,7 +198,12 @@ export class PeerConnectionManager {
       sdpMLineIndex: candidateData.sdpMLineIndex
     });
 
-    await this.pc.addIceCandidate(candidate);
+    try {
+      await this.pc.addIceCandidate(candidate);
+      console.log(`✅ Added ICE candidate`);
+    } catch (err) {
+      console.error(`❌ Failed to add ICE candidate:`, err);
+    }
   }
 
   /**
@@ -204,6 +231,11 @@ export class PeerConnectionManager {
   private markConnected(): void {
     this.connected = true;
     console.log('✅ Peer fully connected to leader');
+
+    // Notify callback
+    if (this.onConnectedCallback) {
+      this.onConnectedCallback();
+    }
   }
 
   /**
