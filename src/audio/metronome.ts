@@ -32,9 +32,29 @@ export class Metronome {
 
   // Track scheduled audio sources so we can cancel them
   private scheduledSources: AudioBufferSourceNode[] = [];
+  private scheduledVisualTimeoutIds: number[] = [];
 
   // Callback for visual sync (called when beat is scheduled)
   private onBeatScheduledCallback: ((beatIndex: number, isDownbeat: boolean, timeMs: number) => void) | null = null;
+  private waitingForUserGesture: boolean = false;
+  private readonly onUserGesture = () => {
+    if (!this.isRunning) {
+      this.disarmUserGestureResume();
+      return;
+    }
+
+    void audioContextManager.resume().then(() => {
+      if (!this.isRunning) {
+        this.disarmUserGestureResume();
+        return;
+      }
+
+      this.startSchedulerIfNeeded();
+      this.disarmUserGestureResume();
+    }).catch(() => {
+      // Keep listeners armed until resume succeeds.
+    });
+  };
 
   constructor() {}
 
@@ -73,7 +93,10 @@ export class Metronome {
     const elapsedMs = now - this.beatGrid.anchorPerformanceMs;
     const elapsedBeats = elapsedMs / msPerBeat;
 
-    this.nextBeatIndex = this.beatGrid.beatIndexAtAnchor + Math.ceil(elapsedBeats);
+    // Use floor (clamped at 0) so a fresh anchor doesn't skip beat 0.
+    // Using ceil can jump directly to beat 1 when start is called just after anchor.
+    const beatsSinceAnchor = Math.max(0, Math.floor(elapsedBeats));
+    this.nextBeatIndex = this.beatGrid.beatIndexAtAnchor + beatsSinceAnchor;
     this.nextScheduleTimeMs = this.calculateBeatTime(this.nextBeatIndex);
   }
 
@@ -104,9 +127,12 @@ export class Metronome {
       this.nextScheduleTimeMs = performance.now();
     }
 
-    // Resume audio context (required for user interaction)
-    audioContextManager.resume().then(() => {
-      this.startScheduler();
+    // Resume audio context (required for user interaction).
+    void audioContextManager.resume().then(() => {
+      this.startSchedulerIfNeeded();
+      this.disarmUserGestureResume();
+    }).catch(() => {
+      this.armUserGestureResume();
     });
   }
 
@@ -115,6 +141,7 @@ export class Metronome {
    */
   stop(): void {
     this.isRunning = false;
+    this.disarmUserGestureResume();
 
     if (this.schedulerIntervalId !== null) {
       clearInterval(this.schedulerIntervalId);
@@ -198,6 +225,36 @@ export class Metronome {
         this.scheduleAhead();
       }
     }, REFILL_INTERVAL_MS);
+  }
+
+  private startSchedulerIfNeeded(): void {
+    if (this.schedulerIntervalId !== null) {
+      return;
+    }
+
+    this.startScheduler();
+  }
+
+  private armUserGestureResume(): void {
+    if (this.waitingForUserGesture) {
+      return;
+    }
+
+    this.waitingForUserGesture = true;
+    window.addEventListener('pointerdown', this.onUserGesture, { passive: true });
+    window.addEventListener('keydown', this.onUserGesture);
+    window.addEventListener('touchstart', this.onUserGesture, { passive: true });
+  }
+
+  private disarmUserGestureResume(): void {
+    if (!this.waitingForUserGesture) {
+      return;
+    }
+
+    this.waitingForUserGesture = false;
+    window.removeEventListener('pointerdown', this.onUserGesture);
+    window.removeEventListener('keydown', this.onUserGesture);
+    window.removeEventListener('touchstart', this.onUserGesture);
   }
 
   /**
@@ -290,11 +347,17 @@ export class Metronome {
     // Schedule visual callback to trigger at the right time
     if (this.onBeatScheduledCallback) {
       const visualDelay = Math.max(0, playTimeMs - performance.now());
-      setTimeout(() => {
+      const timeoutId = window.setTimeout(() => {
+        const index = this.scheduledVisualTimeoutIds.indexOf(timeoutId);
+        if (index > -1) {
+          this.scheduledVisualTimeoutIds.splice(index, 1);
+        }
+
         if (this.onBeatScheduledCallback) {
           this.onBeatScheduledCallback(beatIndex, isDownbeat, playTimeMs);
         }
       }, visualDelay);
+      this.scheduledVisualTimeoutIds.push(timeoutId);
     }
 
     // Remove from tracking when it finishes playing
@@ -325,5 +388,10 @@ export class Metronome {
 
     // Clear the array
     this.scheduledSources = [];
+
+    for (const timeoutId of this.scheduledVisualTimeoutIds) {
+      clearTimeout(timeoutId);
+    }
+    this.scheduledVisualTimeoutIds = [];
   }
 }

@@ -19,6 +19,7 @@
     hostState,
     hostStatusText,
     setHostBpm,
+    setHostPendingResume,
     setHostPeerCount,
     setHostRoomCode,
     setHostRunning,
@@ -42,7 +43,9 @@
   import { backendLabel, clampBpm, sanitizeCode, shouldAutoJoin } from './state/runtime-ops.js';
   import {
     copyTextToClipboard,
+    loadPersistedHostSession,
     loadStoredHostRoomCode,
+    persistHostSession,
     persistHostRoomCode,
     readSharedRoomCodeFromUrl,
     renderQrCode,
@@ -54,6 +57,7 @@
   let transportRuntime: TransportRuntime;
   let workflow: AppWorkflowController | null = null;
   let viewController: ViewController | null = null;
+  let isPageUnloading = false;
 
   let hostBeatEl: HTMLDivElement | null = null;
   let joinBeatEl: HTMLDivElement | null = null;
@@ -64,7 +68,7 @@
   $: activePlayback = $hostState.isRunning;
   $: bpmDisabled = !hasLeader;
   $: startDisabled = !hasLeader || activePlayback;
-  $: stopDisabled = !hasLeader || !activePlayback;
+  $: stopDisabled = !hasLeader || (!activePlayback && !$hostState.hasPendingResume);
   $: {
     if ($uiState.activeTab === 'host') {
       setRoomCodeInUrl($hostState.currentRoomId);
@@ -105,6 +109,7 @@
     const running = leader.getState() === 'L_RUNNING';
     if (!running) {
       leader.setBPM(bpm);
+      workflow?.syncHostSessionNow();
       return;
     }
 
@@ -112,6 +117,7 @@
       const currentLeader = get(sessionState).leader;
       const currentBpm = get(hostState).currentBpm;
       currentLeader?.setBPM(currentBpm);
+      workflow?.syncHostSessionNow();
     });
   }
 
@@ -156,6 +162,7 @@
       getPeer: () => get(sessionState).peer,
       setPeer,
       setHostRunning,
+      setHostPendingResume,
       setHostPeerCount,
       setJoinStatus,
       setJoinLiveStatus,
@@ -164,6 +171,8 @@
       setJoinInputDisabled,
       setBackendStatus: setBackendStatusWithDetail,
       loadStoredHostRoomCode,
+      loadPersistedHostSession,
+      persistHostSession,
       setHostRoomCode: setHostRoomCodeWithPersistence,
       showHostTemporaryStatus,
       applyHostBpm,
@@ -324,11 +333,33 @@
     setBackendLabel(backendLabel(config.signaling.backend));
     setBackendStatusWithDetail('idle');
 
+    const onPageHide = () => {
+      isPageUnloading = true;
+      workflow?.syncHostSessionNow();
+    };
+
     document.addEventListener('keydown', onDocumentKeydown);
     document.addEventListener('pointerup', stopBpmHold);
+    window.addEventListener('pagehide', onPageHide);
 
     const sharedRoom = readSharedRoomCodeFromUrl();
-    if (sharedRoom) {
+    const storedHostRoomCode = loadStoredHostRoomCode();
+    const hasRestorableHostSession = Boolean(
+      storedHostRoomCode && loadPersistedHostSession(storedHostRoomCode)
+    );
+    const shouldRestoreHost =
+      Boolean(storedHostRoomCode) &&
+      hasRestorableHostSession &&
+      (!sharedRoom || sharedRoom === storedHostRoomCode);
+
+    if (shouldRestoreHost) {
+      activateTab('host');
+      workflow?.ensureHostRoom().catch((error) => {
+        console.error(error);
+        setHostPeerCount(0);
+        setBackendStatusWithDetail('error', errorText(error));
+      });
+    } else if (sharedRoom) {
       activateTab('join');
       setJoinCode(sharedRoom);
       showJoinEntry();
@@ -346,11 +377,12 @@
     return () => {
       document.removeEventListener('keydown', onDocumentKeydown);
       document.removeEventListener('pointerup', stopBpmHold);
+      window.removeEventListener('pagehide', onPageHide);
     };
   });
 
   onDestroy(() => {
-    workflow?.destroy();
+    workflow?.destroy({ closeConnections: !isPageUnloading });
     workflow = null;
     viewController = null;
   });

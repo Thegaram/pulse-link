@@ -24,6 +24,14 @@ const STALE_PEER_SWEEP_MS = 1000;
 const BPM_CHANGE_LEAD_MS = 300;
 type ControlMessageType = 'start_announce' | 'stop_announce' | 'param_update' | 'clock_offset' | 'room_closed';
 
+export interface LeaderPersistenceSnapshot {
+  roomId: string;
+  bpm: number;
+  running: boolean;
+  anchorLeaderMs?: number;
+  beatIndexAtAnchor?: number;
+}
+
 export class LeaderStateMachine {
   private state: LeaderState = 'L_IDLE';
   private roomState: RoomStateManager | null = null;
@@ -306,6 +314,40 @@ export class LeaderStateMachine {
   }
 
   /**
+   * Resume running playback from an existing beat anchor.
+   * Used when restoring host session after page refresh.
+   */
+  resumeMetronomeFromAnchor(anchorLeaderMs: number, beatIndexAtAnchor: number): void {
+    if (this.state !== 'L_ROOM_OPEN') {
+      return;
+    }
+
+    if (!this.roomState || !this.connectionManager) {
+      return;
+    }
+
+    const bpm = this.roomState.getState().bpm;
+    this.roomState.setBeatAnchor(anchorLeaderMs, beatIndexAtAnchor);
+    this.roomState.setStatus('running');
+    this.state = 'L_RUNNING';
+
+    const announcement: StartAnnouncePayload = {
+      bpm,
+      version: this.roomState.getState().version,
+      anchorLeaderMs,
+      beatIndexAtAnchor
+    };
+    this.broadcastControl('start_announce', announcement);
+
+    this.metronome.setBeatGrid({
+      bpm,
+      anchorPerformanceMs: anchorLeaderMs,
+      beatIndexAtAnchor
+    });
+    this.metronome.start(bpm);
+  }
+
+  /**
    * Update BPM (for future: while running)
    */
   setBPM(bpm: number): void {
@@ -440,5 +482,21 @@ export class LeaderStateMachine {
    */
   getMetronome(): Metronome {
     return this.metronome;
+  }
+
+  getPersistenceSnapshot(): LeaderPersistenceSnapshot | null {
+    if (!this.roomState) {
+      return null;
+    }
+
+    const state = this.roomState.getState();
+    const running = state.status === 'running' && this.state === 'L_RUNNING';
+    return {
+      roomId: state.roomId,
+      bpm: state.bpm,
+      running,
+      anchorLeaderMs: running ? state.startAtLeaderMs : undefined,
+      beatIndexAtAnchor: running ? (state.beatIndexAtAnchor ?? 0) : undefined
+    };
   }
 }

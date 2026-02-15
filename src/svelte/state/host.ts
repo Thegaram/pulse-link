@@ -5,6 +5,7 @@ export interface HostState {
   currentRoomId: string | null;
   currentBpm: number;
   isRunning: boolean;
+  hasPendingResume: boolean;
   peerCount: number;
   statusOverrideText: string;
 }
@@ -13,6 +14,7 @@ const initialHostState: HostState = {
   currentRoomId: null,
   currentBpm: 120,
   isRunning: false,
+  hasPendingResume: false,
   peerCount: 0,
   statusOverrideText: ''
 };
@@ -38,6 +40,10 @@ export function setHostBpm(bpm: number): void {
 
 export function setHostRunning(isRunning: boolean): void {
   update((state) => ({ ...state, isRunning }));
+}
+
+export function setHostPendingResume(hasPendingResume: boolean): void {
+  update((state) => ({ ...state, hasPendingResume }));
 }
 
 export function setHostPeerCount(peerCount: number): void {
@@ -66,8 +72,8 @@ export function resetHostState(): void {
     ...state,
     currentRoomId: null,
     isRunning: false,
+    hasPendingResume: false,
     peerCount: 0,
     statusOverrideText: ''
   }));
 }
-

@@ -31,6 +31,10 @@ export class AppWorkflowController {
     this.hostController.queueRunningBpmUpdate(apply);
   }
 
+  syncHostSessionNow(): void {
+    this.hostController.syncHostSessionNow();
+  }
+
   async ensureHostRoom(forceNewCode = false): Promise<void> {
     await this.hostController.ensureHostRoom(forceNewCode);
   }
@@ -73,9 +77,15 @@ export class AppWorkflowController {
     this.hostController.stopHostMetronome();
   }
 
-  destroy(): void {
+  destroy(options?: { closeConnections?: boolean }): void {
+    const closeConnections = options?.closeConnections ?? true;
     this.timers.destroy();
-    void this.joinController.teardownPeer();
-    void this.hostController.teardownHost();
+    if (closeConnections) {
+      void this.joinController.teardownPeer();
+      void this.hostController.teardownHost();
+      return;
+    }
+
+    this.hostController.syncHostSessionNow();
   }
 }

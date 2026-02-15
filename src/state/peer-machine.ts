@@ -86,10 +86,19 @@ export class PeerStateMachine {
 
     // Handle connection
     this.connectionManager.onConnected(() => {
+      const wasRunning = this.state === 'C_RUNNING' || this.metronome.running();
       this.clearPendingStart();
       this.clockSync.reset();
       this.hasClockOffset = false;
       this.offsetUpdateCount = 0;
+
+      if (wasRunning) {
+        this.state = 'C_RUNNING';
+        console.log('✅ Reconnected to leader while running; keeping running state');
+        this.emitSyncStatus('Running.');
+        return;
+      }
+
       this.state = 'C_SYNCING';
       console.log('✅ Connected to leader, syncing clock...');
       this.emitSyncStatus('Connected. Waiting for host to start.');

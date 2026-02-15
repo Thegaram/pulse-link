@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 
 const ENV_PATH = '.env';
 const OUT_PATH = 'config.local.json';
@@ -32,12 +33,24 @@ function pick(env, key, fallback = '') {
   return env[key] ?? process.env[key] ?? fallback;
 }
 
+function detectGitShortSha() {
+  try {
+    const sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+    return sha || 'local';
+  } catch {
+    return 'local';
+  }
+}
+
 let fileEnv = {};
 if (fs.existsSync(ENV_PATH)) {
   fileEnv = parseEnv(fs.readFileSync(ENV_PATH, 'utf8'));
 }
 
 const mergedEnv = { ...fileEnv };
+const appVersion = pick(mergedEnv, 'APP_VERSION', '') || detectGitShortSha();
 
 const output = {
   TRANSPORT_MODE: pick(mergedEnv, 'TRANSPORT_MODE', 'pubsub'),
@@ -51,7 +64,7 @@ const output = {
     token: pick(mergedEnv, 'ABLY_TOKEN', ''),
     clientId: pick(mergedEnv, 'ABLY_CLIENT_ID', '')
   },
-  APP_VERSION: pick(mergedEnv, 'APP_VERSION', '')
+  APP_VERSION: appVersion
 };
 
 fs.writeFileSync(OUT_PATH, `${JSON.stringify(output, null, 2)}\n`);

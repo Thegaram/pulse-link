@@ -1,4 +1,4 @@
-import { HOST_ROOM_STORAGE_KEY } from '../state/constants.js';
+import { HOST_ROOM_STORAGE_KEY, HOST_SESSION_STORAGE_KEY } from '../state/constants.js';
 import { sanitizeCode } from '../state/runtime-ops.js';
 
 declare const QRCode: {
@@ -32,6 +32,74 @@ export function persistHostRoomCode(code: string | null): void {
   } else {
     localStorage.removeItem(HOST_ROOM_STORAGE_KEY);
   }
+}
+
+export interface PersistedHostSession {
+  roomId: string;
+  bpm: number;
+  running: boolean;
+  anchorEpochMs?: number;
+  beatIndexAtAnchor?: number;
+}
+
+function isValidPersistedHostSession(value: unknown): value is PersistedHostSession {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const session = value as Record<string, unknown>;
+  if (typeof session.roomId !== 'string' || sanitizeCode(session.roomId).length !== 6) {
+    return false;
+  }
+  if (typeof session.bpm !== 'number' || !Number.isFinite(session.bpm)) {
+    return false;
+  }
+  if (typeof session.running !== 'boolean') {
+    return false;
+  }
+  if (session.anchorEpochMs !== undefined && (typeof session.anchorEpochMs !== 'number' || !Number.isFinite(session.anchorEpochMs))) {
+    return false;
+  }
+  if (session.beatIndexAtAnchor !== undefined && (typeof session.beatIndexAtAnchor !== 'number' || !Number.isFinite(session.beatIndexAtAnchor))) {
+    return false;
+  }
+
+  return true;
+}
+
+export function loadPersistedHostSession(roomId: string): PersistedHostSession | null {
+  const raw = localStorage.getItem(HOST_SESSION_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isValidPersistedHostSession(parsed)) {
+      localStorage.removeItem(HOST_SESSION_STORAGE_KEY);
+      return null;
+    }
+
+    const normalizedRoomId = sanitizeCode(parsed.roomId);
+    if (normalizedRoomId !== sanitizeCode(roomId)) {
+      return null;
+    }
+
+    return {
+      roomId: normalizedRoomId,
+      bpm: parsed.bpm,
+      running: parsed.running,
+      anchorEpochMs: parsed.anchorEpochMs,
+      beatIndexAtAnchor: parsed.beatIndexAtAnchor
+    };
+  } catch {
+    localStorage.removeItem(HOST_SESSION_STORAGE_KEY);
+    return null;
+  }
+}
+
+export function persistHostSession(session: PersistedHostSession): void {
+  localStorage.setItem(HOST_SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
 export function readSharedRoomCodeFromUrl(): string | null {

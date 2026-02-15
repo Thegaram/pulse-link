@@ -1,6 +1,7 @@
 import type { LeaderStateMachine } from '../../state/leader-machine.js';
 import type { PeerStateMachine } from '../../state/peer-machine.js';
 import type { Mode } from './constants.js';
+import type { PersistedHostSession } from '../services/browser.js';
 
 export type BackendState = 'idle' | 'connecting' | 'ok' | 'error';
 
@@ -16,6 +17,7 @@ export interface ControllerCallbacks {
   setPeer(peer: PeerStateMachine | null): void;
 
   setHostRunning(running: boolean): void;
+  setHostPendingResume(hasPendingResume: boolean): void;
   setHostPeerCount(peerCount: number): void;
   setJoinStatus(status: string): void;
   setJoinLiveStatus(status: string): void;
@@ -27,6 +29,8 @@ export interface ControllerCallbacks {
   setBackendStatus(state: BackendState, detail?: string): void;
 
   loadStoredHostRoomCode(): string | null;
+  loadPersistedHostSession(roomId: string): PersistedHostSession | null;
+  persistHostSession(session: PersistedHostSession): void;
   setHostRoomCode(code: string | null): void;
   showHostTemporaryStatus(text: string): void;
   applyHostBpm(value: number): void;
