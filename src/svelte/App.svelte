@@ -375,7 +375,8 @@
     const hasRestorableHostSession = Boolean(
       storedHostRoomCode && loadPersistedHostSession(storedHostRoomCode)
     );
-    const shouldRestoreHost = Boolean(storedHostRoomCode) && hasRestorableHostSession && !sharedRoom;
+    const shouldRestoreHost =
+      Boolean(storedHostRoomCode) && hasRestorableHostSession && !sharedRoom;
 
     if (shouldRestoreHost) {
       activateTab('host');
