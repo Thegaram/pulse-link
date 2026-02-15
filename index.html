@@ -4,407 +4,515 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Pulse Link - Synchronized metronome for musicians via P2P WebRTC">
-  <title>Pulse Link - Synchronized Metronome</title>
+  <title>Pulse Link</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Home View -->
-  <div id="homeView" class="view">
-    <div class="container">
-      <div class="header">
-        <h1>🎵 Pulse Link</h1>
-        <p class="subtitle">Synchronized metronome for musicians</p>
+  <main class="app">
+    <header class="tabs" role="tablist" aria-label="Mode">
+      <button id="hostTabBtn" class="tab active" role="tab" aria-selected="true">Host</button>
+      <button id="joinTabBtn" class="tab" role="tab" aria-selected="false">Join</button>
+    </header>
+
+    <section id="hostView" class="view">
+      <div id="hostShare" class="room-share" title="Copy code and show QR">
+        <button id="openQrBtn" class="qr-icon-btn" aria-label="Open room QR">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="3" width="6" height="6"></rect>
+            <rect x="15" y="3" width="6" height="6"></rect>
+            <rect x="3" y="15" width="6" height="6"></rect>
+            <rect x="16" y="16" width="2" height="2"></rect>
+            <rect x="19" y="16" width="2" height="2"></rect>
+            <rect x="16" y="19" width="2" height="2"></rect>
+            <rect x="11" y="11" width="2" height="2"></rect>
+            <rect x="13" y="13" width="2" height="2"></rect>
+          </svg>
+        </button>
+        <div id="hostRoomCode" class="room-code">------</div>
       </div>
 
-      <div class="actions">
-        <button id="createRoomBtn" class="btn btn-primary">
-          Create Room
-        </button>
-        <button id="joinRoomBtn" class="btn btn-secondary">
-          Join Room
-        </button>
+      <div class="stage">
+        <div id="hostBeat" class="beat"></div>
       </div>
 
-      <div class="info-box">
-        <p>Pulse Link synchronizes a metronome across multiple devices using P2P WebRTC.</p>
-        <p>Perfect for remote rehearsals, practice sessions, or live performances.</p>
+      <div class="host-bpm-value" id="hostBpmValue">120</div>
+
+      <div class="control-row">
+        <button id="bpmDownBtn" class="btn btn-soft btn-big" aria-label="Decrease BPM">-</button>
+        <button id="bpmUpBtn" class="btn btn-soft btn-big" aria-label="Increase BPM">+</button>
+        <button id="startBtn" class="btn btn-primary">Start</button>
+        <button id="stopBtn" class="btn btn-danger">Stop</button>
       </div>
+
+      <p id="hostStatus" class="status">Connected peers: 0</p>
+    </section>
+
+    <section id="joinView" class="view hidden">
+      <div id="joinEntry" class="join-entry">
+        <div id="joinCodeLine" class="code-line" aria-label="6-character room code" tabindex="0">
+          <span id="joinCodeVisual" class="code-line-visual">_ _ _ _ _ _</span>
+          <input
+            id="joinCodeInput"
+            class="code-line-input"
+            type="text"
+            inputmode="text"
+            maxlength="6"
+            autocomplete="one-time-code"
+            aria-label="Room code"
+          >
+        </div>
+        <p id="joinStatus" class="status">Enter a room code to join.</p>
+      </div>
+
+      <div id="joinLive" class="join-live hidden">
+        <div class="stage">
+          <div id="joinBeat" class="beat"></div>
+        </div>
+        <div class="join-bpm-block">
+          <div id="joinBpmValue" class="join-bpm-value">120</div>
+          <div class="join-bpm-label">BPM</div>
+        </div>
+        <p id="joinLiveStatus" class="status">Connected. Waiting for host to start.</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="qrModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="qrTitle">
+    <div class="modal-card">
+      <h2 id="qrTitle">Share Room</h2>
+      <div id="qrcode"></div>
+      <button id="closeQrBtn" class="btn btn-primary">Close</button>
     </div>
   </div>
 
-  <!-- Create Room View (Leader) -->
-  <div id="createView" class="view" style="display: none;">
-    <div class="container">
-      <div class="header">
-        <h1>Create Room</h1>
-        <p class="subtitle">Set tempo and start session</p>
-      </div>
-
-      <div class="bpm-section">
-        <div class="bpm-display" id="bpmDisplay">120</div>
-        <div class="bpm-label">BPM</div>
-
-        <div class="slider-container">
-          <input type="range" id="bpmSlider" min="40" max="240" value="120" step="1">
-          <div class="range-labels">
-            <span>40</span>
-            <span>140</span>
-            <span>240</span>
-          </div>
-        </div>
-      </div>
-
-      <button id="createAndOpenBtn" class="btn btn-primary btn-large">
-        Create Room
-      </button>
-
-      <div id="roomCreatedSection" style="display: none;">
-        <div class="room-code-section">
-          <p class="label">Share this code:</p>
-          <div class="room-code" id="roomCodeDisplay">------</div>
-          <p class="hint">Others can join by entering this code</p>
-        </div>
-
-        <div class="qr-section" id="qrSection">
-          <div id="qrcode"></div>
-          <p class="hint">Or scan this QR code</p>
-        </div>
-
-        <button id="startMetronomeBtn" class="btn btn-success btn-large" disabled>
-          Start Metronome
-        </button>
-        <p class="hint" id="syncHint" style="margin-top: 12px; display: none;">
-          Waiting for peers to sync clocks...
-        </p>
-
-        <div id="leaderStatus" class="status"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Join Room View (Peer) -->
-  <div id="joinView" class="view" style="display: none;">
-    <div class="container">
-      <div class="header">
-        <h1>Join Room</h1>
-        <p class="subtitle">Enter room code to join session</p>
-      </div>
-
-      <div class="input-group">
-        <label for="roomIdInput">Room Code</label>
-        <input
-          type="text"
-          id="roomIdInput"
-          placeholder="Enter 6-digit code"
-          maxlength="6"
-          autocomplete="off"
-        >
-      </div>
-
-      <button id="joinRoomSubmitBtn" class="btn btn-primary btn-large">
-        Join Room
-      </button>
-
-      <div id="peerStatus" class="status" style="display: none;"></div>
-
-      <div class="info-box" style="margin-top: 24px;">
-        <p><strong>Tip:</strong> Make sure you're on the same network or have a stable internet connection for best results.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Playing View -->
-  <div id="playingView" class="view" style="display: none;">
-    <div class="container">
-      <div class="header">
-        <h1 id="playingRoomCode">Room: ------</h1>
-        <p class="subtitle" id="playingRole">Leader</p>
-      </div>
-
-      <div class="beat-display">
-        <div class="beat-indicator" id="beatIndicator"></div>
-      </div>
-
-      <div class="tempo-display">
-        <div class="tempo-value" id="tempoValue">120</div>
-        <div class="tempo-label">BPM</div>
-      </div>
-
-      <div class="countdown-display" id="countdownDisplay" style="display: none;">
-        <div class="countdown-value" id="countdownValue">3</div>
-        <div class="countdown-label">Starting in...</div>
-      </div>
-
-      <div class="playback-controls" id="leaderControls" style="display: none;">
-        <button id="stopMetronomeBtn" class="btn btn-danger">
-          Stop Metronome
-        </button>
-      </div>
-
-      <div class="playback-controls" id="peerControls" style="display: none;">
-        <button id="leaveRoomBtn" class="btn btn-secondary">
-          Leave Room
-        </button>
-      </div>
-
-      <div class="sync-stats" id="syncStats" style="display: none;">
-        <div class="stat-item">
-          <span class="stat-label">Status:</span>
-          <span class="stat-value" id="syncStatus">Syncing...</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">Offset:</span>
-          <span class="stat-value" id="syncOffset">--</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- QR Code Library (CDN) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-  <!-- Main App -->
   <script type="module">
-    import { App } from './dist/ui/app.js';
+    import { LeaderStateMachine } from './dist/state/leader-machine.js';
+    import { PeerStateMachine } from './dist/state/peer-machine.js';
+    import { generatePeerId } from './dist/types.js';
     import { ICE_CONFIG } from './config.js';
-    import { show, hide, setText, getRoomUrl } from './dist/ui/components.js';
 
-    // Initialize app
-    const app = new App(ICE_CONFIG);
+    const MIN_BPM = 40;
+    const MAX_BPM = 240;
+    let leader = null;
+    let peer = null;
+    let currentRoomId = null;
+    let currentBpm = 120;
+    let activeTab = 'host';
+    let joinBpmTimer = null;
+    let hostStatusTimer = null;
+    let hostStatusOverrideUntil = 0;
+    let hostStatusOverrideText = '';
+    let joinInProgress = false;
 
-    // BPM slider
-    const bpmSlider = document.getElementById('bpmSlider');
-    const bpmDisplay = document.getElementById('bpmDisplay');
+    const hostTabBtn = document.getElementById('hostTabBtn');
+    const joinTabBtn = document.getElementById('joinTabBtn');
+    const hostView = document.getElementById('hostView');
+    const joinView = document.getElementById('joinView');
 
-    if (bpmSlider && bpmDisplay) {
-      bpmSlider.addEventListener('input', (e) => {
-        bpmDisplay.textContent = e.target.value;
-      });
+    const hostShare = document.getElementById('hostShare');
+    const openQrBtn = document.getElementById('openQrBtn');
+    const hostRoomCode = document.getElementById('hostRoomCode');
+    const hostBeat = document.getElementById('hostBeat');
+    const hostStatus = document.getElementById('hostStatus');
+    const hostBpmValue = document.getElementById('hostBpmValue');
+
+    const bpmDownBtn = document.getElementById('bpmDownBtn');
+    const bpmUpBtn = document.getElementById('bpmUpBtn');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    const joinEntry = document.getElementById('joinEntry');
+    const joinLive = document.getElementById('joinLive');
+    const joinCodeLine = document.getElementById('joinCodeLine');
+    const joinCodeVisual = document.getElementById('joinCodeVisual');
+    const joinCodeInput = document.getElementById('joinCodeInput');
+    const joinStatus = document.getElementById('joinStatus');
+    const joinLiveStatus = document.getElementById('joinLiveStatus');
+    const joinBeat = document.getElementById('joinBeat');
+    const joinBpmValue = document.getElementById('joinBpmValue');
+
+    const qrModal = document.getElementById('qrModal');
+    const qrNode = document.getElementById('qrcode');
+    const closeQrBtn = document.getElementById('closeQrBtn');
+
+    function refreshHostStatus() {
+      if (Date.now() < hostStatusOverrideUntil) {
+        hostStatus.textContent = hostStatusOverrideText;
+        return;
+      }
+
+      const peers = leader ? leader.getPeerCount() : 0;
+      hostStatus.textContent = `Connected peers: ${peers}`;
     }
 
-    // Create room button
-    const createAndOpenBtn = document.getElementById('createAndOpenBtn');
-    const roomCreatedSection = document.getElementById('roomCreatedSection');
-    const roomCodeDisplay = document.getElementById('roomCodeDisplay');
-    const qrSection = document.getElementById('qrSection');
-
-    if (createAndOpenBtn) {
-      createAndOpenBtn.addEventListener('click', async () => {
-        const bpm = parseInt(bpmSlider.value);
-        const leader = app.getLeaderMachine();
-
-        if (!leader) return;
-
-        createAndOpenBtn.disabled = true;
-        createAndOpenBtn.textContent = 'Creating...';
-
-        try {
-          const roomId = await leader.createRoom(bpm, app.getIceConfig());
-
-          // Show room code
-          roomCodeDisplay.textContent = roomId;
-          show(roomCreatedSection);
-
-          // Generate QR code
-          const qrDiv = document.getElementById('qrcode');
-          if (qrDiv) {
-            qrDiv.innerHTML = '';
-            new QRCode(qrDiv, {
-              text: getRoomUrl(roomId),
-              width: 200,
-              height: 200,
-              colorDark: '#00d4ff',
-              colorLight: '#1a1a1a'
-            });
-          }
-
-          // Enable start button after waiting for peers to sync (2 seconds minimum)
-          const startBtn = document.getElementById('startMetronomeBtn');
-          const syncHint = document.getElementById('syncHint');
-          if (startBtn && syncHint) {
-            syncHint.style.display = 'block';
-            setTimeout(() => {
-              startBtn.disabled = false;
-              syncHint.style.display = 'none';
-            }, 2000);
-          }
-
-        } catch (err) {
-          console.error('Failed to create room:', err);
-          alert('Failed to create room');
-          createAndOpenBtn.disabled = false;
-          createAndOpenBtn.textContent = 'Create Room';
-        }
-      });
+    function showHostTemporaryStatus(text, durationMs = 1200) {
+      hostStatusOverrideText = text;
+      hostStatusOverrideUntil = Date.now() + durationMs;
+      refreshHostStatus();
     }
 
-    // Start metronome button
-    const startMetronomeBtn = document.getElementById('startMetronomeBtn');
-    if (startMetronomeBtn) {
-      startMetronomeBtn.addEventListener('click', () => {
-        const leader = app.getLeaderMachine();
-        if (!leader) return;
-
-        leader.startMetronome();
-        app.showPlayingView();
-
-        // Setup playing view
-        setupPlayingView();
-
-        // Show countdown
-        showCountdown(3); // 3 second countdown
-      });
-    }
-
-    // Join room button
-    const joinRoomSubmitBtn = document.getElementById('joinRoomSubmitBtn');
-    const roomIdInput = document.getElementById('roomIdInput');
-    const peerStatus = document.getElementById('peerStatus');
-
-    if (joinRoomSubmitBtn && roomIdInput) {
-      joinRoomSubmitBtn.addEventListener('click', async () => {
-        const roomId = roomIdInput.value.trim().toUpperCase();
-        if (!roomId || roomId.length !== 6) {
-          alert('Please enter a valid 6-character room code');
-          return;
-        }
-
-        const peer = app.getPeerMachine();
-        if (!peer) return;
-
-        joinRoomSubmitBtn.disabled = true;
-        roomIdInput.disabled = true;
-        setText(peerStatus, 'Connecting to room...');
-        show(peerStatus);
-
-        try {
-          await peer.joinRoom(roomId, app.getIceConfig());
-          setText(peerStatus, 'Connected! Waiting for session to start...');
-
-          // Register callback for when leader starts the metronome
-          peer.onStart(() => {
-            console.log('🎵 Peer: Starting metronome');
-            app.showPlayingView();
-            setupPlayingView();
-          });
-
-        } catch (err) {
-          console.error('Failed to join room:', err);
-          setText(peerStatus, 'Failed to join room. Please try again.');
-          joinRoomSubmitBtn.disabled = false;
-          roomIdInput.disabled = false;
-        }
-      });
-    }
-
-    // Setup playing view
-    function setupPlayingView() {
-      const role = app.getRole();
-      const playingRoomCode = document.getElementById('playingRoomCode');
-      const playingRole = document.getElementById('playingRole');
-      const tempoValue = document.getElementById('tempoValue');
-      const leaderControls = document.getElementById('leaderControls');
-      const peerControls = document.getElementById('peerControls');
-
-      if (role === 'leader') {
-        const leader = app.getLeaderMachine();
-        if (leader) {
-          playingRoomCode.textContent = `Room: ${leader.getRoomId()}`;
-          playingRole.textContent = 'Leader';
-          tempoValue.textContent = leader.getBPM().toString();
-          show(leaderControls);
-          hide(peerControls);
-
-          // Register beat callback for visual sync
-          setupBeatVisualSync(leader);
-        }
-      } else if (role === 'peer') {
-        const peer = app.getPeerMachine();
-        if (peer) {
-          playingRoomCode.textContent = `Room: ${peer.getRoomId()}`;
-          playingRole.textContent = 'Peer';
-          show(peerControls);
-          hide(leaderControls);
-
-          // Register beat callback for visual sync
-          setupBeatVisualSync(peer);
-        }
+    function stopHostStatusTimer() {
+      if (hostStatusTimer !== null) {
+        clearInterval(hostStatusTimer);
+        hostStatusTimer = null;
       }
     }
 
-    // Setup visual sync with metronome beats
-    function setupBeatVisualSync(machine) {
-      const beatIndicator = document.getElementById('beatIndicator');
-      if (!beatIndicator) return;
+    function startHostStatusTimer() {
+      stopHostStatusTimer();
+      refreshHostStatus();
+      hostStatusTimer = setInterval(() => {
+        refreshHostStatus();
+      }, 500);
+    }
 
-      // Get metronome instance and register beat callback
-      const metronome = machine.getMetronome();
-      if (!metronome) return;
+    function setJoinStatus(text) {
+      joinStatus.textContent = text;
+    }
 
-      metronome.onBeatScheduled((beatIndex, isDownbeat, timeMs) => {
-        // Flash the indicator in sync with audio
-        beatIndicator.classList.remove('flash', 'downbeat');
-        void beatIndicator.offsetWidth; // Force reflow
-        beatIndicator.classList.add('flash');
-        if (isDownbeat) {
-          beatIndicator.classList.add('downbeat');
-        }
+    function setJoinLiveStatus(text) {
+      joinLiveStatus.textContent = text;
+    }
+
+    function getJoinCode() {
+      return joinCodeInput.value;
+    }
+
+    function setJoinCode(code) {
+      const normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      joinCodeInput.value = normalized;
+      renderJoinCodeVisual();
+    }
+
+    function setJoinInputDisabled(disabled) {
+      joinCodeInput.disabled = disabled;
+      joinCodeLine.classList.toggle('disabled', disabled);
+    }
+
+    function renderJoinCodeVisual() {
+      const chars = joinCodeInput.value.split('');
+      const display = Array.from({ length: 6 }, (_, i) => chars[i] ?? '_').join(' ');
+      joinCodeVisual.textContent = display;
+    }
+
+    function clampBpm(value) {
+      return Math.max(MIN_BPM, Math.min(MAX_BPM, value));
+    }
+
+    function setHostRoomCode(code) {
+      currentRoomId = code;
+      hostRoomCode.textContent = code || '------';
+    }
+
+    function roomUrl(roomId) {
+      const base = `${window.location.origin}${window.location.pathname}`;
+      return `${base}?room=${roomId}`;
+    }
+
+    function flashBeat(node, isDownbeat) {
+      node.classList.remove('flash', 'downbeat');
+      void node.offsetWidth;
+      node.classList.add('flash');
+      if (isDownbeat) {
+        node.classList.add('downbeat');
+      }
+    }
+
+    function updateHostControls() {
+      const running = leader ? leader.isRunning() : false;
+      const hasLeader = Boolean(leader);
+
+      bpmDownBtn.disabled = !hasLeader || running;
+      bpmUpBtn.disabled = !hasLeader || running;
+      startBtn.disabled = !hasLeader || running;
+      stopBtn.disabled = !hasLeader || !running;
+    }
+
+    function applyHostBpm(value) {
+      const parsed = Number.parseInt(String(value), 10);
+      currentBpm = clampBpm(Number.isNaN(parsed) ? currentBpm : parsed);
+      hostBpmValue.textContent = String(currentBpm);
+
+      if (leader) {
+        leader.setBPM(currentBpm);
+      }
+    }
+
+    function clearJoinTimer() {
+      if (joinBpmTimer !== null) {
+        clearInterval(joinBpmTimer);
+        joinBpmTimer = null;
+      }
+    }
+
+    function showJoinEntry() {
+      joinEntry.classList.remove('hidden');
+      joinLive.classList.add('hidden');
+      clearJoinTimer();
+      joinInProgress = false;
+      setJoinInputDisabled(false);
+      joinCodeInput.focus();
+    }
+
+    function showJoinLive() {
+      joinEntry.classList.add('hidden');
+      joinLive.classList.remove('hidden');
+    }
+
+    function activateTab(tab) {
+      activeTab = tab;
+
+      const isHost = tab === 'host';
+      hostTabBtn.classList.toggle('active', isHost);
+      hostTabBtn.setAttribute('aria-selected', String(isHost));
+      joinTabBtn.classList.toggle('active', !isHost);
+      joinTabBtn.setAttribute('aria-selected', String(!isHost));
+
+      hostView.classList.toggle('hidden', !isHost);
+      joinView.classList.toggle('hidden', isHost);
+    }
+
+    async function ensureHostRoom() {
+      if (leader) {
+        updateHostControls();
+        return;
+      }
+
+      leader = new LeaderStateMachine(generatePeerId());
+      leader.getMetronome().onBeatScheduled((_, isDownbeat) => {
+        flashBeat(hostBeat, isDownbeat);
+      });
+
+      const roomId = await leader.createRoom(currentBpm, ICE_CONFIG);
+      setHostRoomCode(roomId);
+      startHostStatusTimer();
+      updateHostControls();
+    }
+
+    async function teardownHost() {
+      if (!leader) {
+        return;
+      }
+
+      leader.stopMetronome();
+      await leader.closeRoom();
+      leader = null;
+      setHostRoomCode(null);
+      stopHostStatusTimer();
+      refreshHostStatus();
+      updateHostControls();
+    }
+
+    async function teardownPeer() {
+      if (!peer) {
+        return;
+      }
+
+      await peer.leaveRoom();
+      peer = null;
+      clearJoinTimer();
+      showJoinEntry();
+      setJoinStatus('Enter a room code to join.');
+    }
+
+    async function switchToHost() {
+      await teardownPeer();
+      activateTab('host');
+      await ensureHostRoom();
+    }
+
+    async function switchToJoin() {
+      await teardownHost();
+      activateTab('join');
+      showJoinEntry();
+    }
+
+    async function joinRoom(roomId) {
+      await teardownPeer();
+      setJoinStatus('Joining room...');
+      joinInProgress = true;
+      setJoinInputDisabled(true);
+
+      peer = new PeerStateMachine(generatePeerId());
+      peer.getMetronome().onBeatScheduled((_, isDownbeat) => {
+        flashBeat(joinBeat, isDownbeat);
+      });
+
+      peer.onStart(() => {
+        showJoinLive();
+        setJoinLiveStatus('Running.');
+
+        joinBpmValue.textContent = String(peer.getMetronome().getBPM());
+        clearJoinTimer();
+        joinBpmTimer = setInterval(() => {
+          if (peer) {
+            joinBpmValue.textContent = String(peer.getMetronome().getBPM());
+          }
+        }, 300);
+      });
+
+      await peer.joinRoom(roomId, ICE_CONFIG);
+      showJoinLive();
+      setJoinLiveStatus('Connected. Waiting for host to start.');
+      joinInProgress = false;
+    }
+
+    function maybeAutoJoin() {
+      if (activeTab !== 'join' || joinInProgress || peer) {
+        return;
+      }
+
+      const roomId = getJoinCode();
+      if (roomId.length !== 6) {
+        return;
+      }
+
+      joinRoom(roomId).catch((error) => {
+        console.error(error);
+        joinInProgress = false;
+        setJoinInputDisabled(false);
+        setJoinStatus('Join failed. Try another code.');
+        showJoinEntry();
       });
     }
 
-    // Stop metronome button
-    const stopMetronomeBtn = document.getElementById('stopMetronomeBtn');
-    if (stopMetronomeBtn) {
-      stopMetronomeBtn.addEventListener('click', async () => {
-        const leader = app.getLeaderMachine();
-        if (leader) {
-          leader.stopMetronome();
-          await leader.closeRoom();
-        }
-        window.location.reload();
+    async function copyCodeOnly() {
+      if (!currentRoomId) {
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(currentRoomId);
+        showHostTemporaryStatus('Code copied');
+      } catch {}
+    }
+
+    function openQrModal() {
+      if (!currentRoomId) {
+        return;
+      }
+
+      qrNode.innerHTML = '';
+      new QRCode(qrNode, {
+        text: roomUrl(currentRoomId),
+        width: 220,
+        height: 220,
+        colorDark: '#111111',
+        colorLight: '#ffffff'
+      });
+      qrModal.classList.remove('hidden');
+    }
+
+    hostTabBtn.addEventListener('click', () => {
+      if (activeTab !== 'host') {
+        switchToHost().catch((error) => {
+          console.error(error);
+          stopHostStatusTimer();
+          hostStatus.textContent = 'Connected peers: 0';
+        });
+      }
+    });
+
+    joinTabBtn.addEventListener('click', () => {
+      if (activeTab !== 'join') {
+        switchToJoin().catch((error) => {
+          console.error(error);
+          setJoinStatus('Failed to open join mode.');
+        });
+      }
+    });
+
+    hostShare.addEventListener('click', () => {
+      copyCodeOnly().catch((error) => {
+        console.error(error);
+      });
+    });
+
+    openQrBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      openQrModal();
+    });
+
+    closeQrBtn.addEventListener('click', () => {
+      qrModal.classList.add('hidden');
+    });
+
+    qrModal.addEventListener('click', (event) => {
+      if (event.target === qrModal) {
+        qrModal.classList.add('hidden');
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !qrModal.classList.contains('hidden')) {
+        qrModal.classList.add('hidden');
+      }
+    });
+
+    bpmDownBtn.addEventListener('click', () => {
+      applyHostBpm(currentBpm - 1);
+    });
+
+    bpmUpBtn.addEventListener('click', () => {
+      applyHostBpm(currentBpm + 1);
+    });
+
+    startBtn.addEventListener('click', () => {
+      if (!leader) {
+        return;
+      }
+
+      leader.startMetronome();
+      updateHostControls();
+    });
+
+    stopBtn.addEventListener('click', () => {
+      if (!leader) {
+        return;
+      }
+
+      leader.stopMetronome();
+      updateHostControls();
+    });
+
+    joinCodeLine.addEventListener('click', () => {
+      if (!joinCodeInput.disabled) {
+        joinCodeInput.focus();
+      }
+    });
+
+    joinCodeInput.addEventListener('input', () => {
+      joinCodeInput.value = joinCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+      renderJoinCodeVisual();
+      maybeAutoJoin();
+    });
+
+    joinCodeInput.addEventListener('paste', (event) => {
+      event.preventDefault();
+      const pasted = (event.clipboardData?.getData('text') ?? '').toUpperCase();
+      setJoinCode(pasted);
+      maybeAutoJoin();
+    });
+
+    applyHostBpm(currentBpm);
+    renderJoinCodeVisual();
+
+    const sharedRoom = new URLSearchParams(window.location.search).get('room');
+    if (sharedRoom && sharedRoom.trim().length === 6) {
+      activateTab('join');
+      setJoinCode(sharedRoom.trim().toUpperCase());
+      showJoinEntry();
+      setJoinStatus('Joining room...');
+      maybeAutoJoin();
+    } else {
+      activateTab('host');
+      ensureHostRoom().catch((error) => {
+        console.error(error);
+        hostStatus.textContent = 'Connected peers: 0';
       });
     }
-
-    // Leave room button
-    const leaveRoomBtn = document.getElementById('leaveRoomBtn');
-    if (leaveRoomBtn) {
-      leaveRoomBtn.addEventListener('click', async () => {
-        const peer = app.getPeerMachine();
-        if (peer) {
-          await peer.leaveRoom();
-        }
-        window.location.reload();
-      });
-    }
-
-    // Countdown display
-    function showCountdown(seconds) {
-      const countdownDisplay = document.getElementById('countdownDisplay');
-      const countdownValue = document.getElementById('countdownValue');
-      const beatDisplay = document.getElementById('beatIndicator')?.parentElement;
-
-      if (!countdownDisplay || !countdownValue) return;
-
-      // Hide beat display, show countdown
-      if (beatDisplay) beatDisplay.style.display = 'none';
-      countdownDisplay.style.display = 'block';
-
-      let remaining = seconds;
-      countdownValue.textContent = remaining.toString();
-
-      const countdownInterval = setInterval(() => {
-        remaining--;
-        if (remaining > 0) {
-          countdownValue.textContent = remaining.toString();
-        } else {
-          clearInterval(countdownInterval);
-          countdownDisplay.style.display = 'none';
-          if (beatDisplay) beatDisplay.style.display = 'flex';
-        }
-      }, 1000);
-    }
-
-    console.log('🎵 Pulse Link loaded');
   </script>
 </body>
 </html>

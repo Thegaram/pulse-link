@@ -68,12 +68,15 @@ export class LeaderStateMachine {
     // Handle peer connections - start time sync when peer connects
     this.connectionManager.onPeerConnected((peerId) => {
       console.log(`✅ Peer connected: ${peerId}, starting time sync`);
+      this.roomState?.addPeer(peerId);
+      this.roomState?.markPeerConnected(peerId);
       this.startTimeSyncWithPeer(peerId);
     });
 
     // Handle peer disconnections - stop time sync
     this.connectionManager.onPeerDisconnected((peerId) => {
       console.log(`❌ Peer disconnected: ${peerId}, stopping time sync`);
+      this.roomState?.removePeer(peerId);
       this.stopTimeSyncWithPeer(peerId);
     });
 
@@ -301,6 +304,13 @@ export class LeaderStateMachine {
    */
   getBPM(): number {
     return this.roomState?.getState().bpm ?? 120;
+  }
+
+  /**
+   * Get current connected peer count
+   */
+  getPeerCount(): number {
+    return this.roomState?.getPeerCount() ?? 0;
   }
 
   /**
