@@ -3,11 +3,10 @@
 A web-first app that lets a group of musicians hear the same metronome phase synchronized across devices.
 
 **Stack:**
--   Static web page (vanilla TypeScript, no build framework needed initially)
--   GitHub Pages / local file hosting
--   Supabase Realtime Broadcast for WebRTC signaling only
--   P2P WebRTC DataChannels for time sync + control (leader-authoritative)
--   STUN by default, TURN optional fallback for restrictive networks
+-   Svelte + Vite frontend shell
+-   TypeScript sync/audio/state core modules
+-   Managed realtime pub/sub signaling (Ably or Supabase) with local mock option
+-   Optional legacy WebRTC transport mode
 
 **Browser Support:**
 -   Desktop: Chrome, Firefox, Safari, Edge (full support)
@@ -20,10 +19,11 @@ A web-first app that lets a group of musicians hear the same metronome phase syn
 
 ### Quick Start
 ```bash
-# Local development with live reload
-python3 -m http.server 8000
-# or
-npx serve .
+# Install deps
+npm install
+
+# Local development
+npm run dev
 
 # Open http://localhost:8000
 ```
@@ -37,14 +37,14 @@ npx serve .
 
 ### Local Secrets
 - Keep committed `config.js` generic; put local keys/tokens in `.env` (ignored by git).
-- Running `npm run build` or `npm run serve` automatically generates `config.local.json` from `.env`.
+- Running `npm run dev` or `npm run build` automatically generates `config.local.json` from `.env`.
 - `config.local.json` is ignored by git and auto-loaded by `index.html` at runtime.
 - Template env file: `.env.example`.
 
 ### Deployment
 - Commit to `main` branch
-- GitHub Pages serves from root or `/docs` folder
-- No build step required (static HTML/CSS/JS)
+- Build with `npm run build`
+- Deploy `dist/` to static hosting
 
 ### Testing Time Sync
 1. Open same room in multiple browser windows/devices

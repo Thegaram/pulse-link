@@ -4,6 +4,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 :root {
   --bg-top: #f9fbfd;
   --bg-bottom: #eef3f9;
@@ -34,7 +38,7 @@ body {
   display: grid;
   justify-items: center;
   gap: 8px;
-  width: min(460px, 100%);
+  width: 100%;
 }
 
 .meta-row {
@@ -45,12 +49,22 @@ body {
 }
 
 .app {
-  width: 100%;
+  width: min(560px, 100%);
+  margin: 0 auto;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 24px;
   box-shadow: 0 30px 80px rgba(15, 23, 42, 0.1);
   padding: 16px;
+}
+
+.panel-frame {
+  width: 100%;
+  min-width: 0;
+}
+
+.panel-frame > .view {
+  width: 100%;
 }
 
 .app-version {
@@ -132,7 +146,9 @@ body {
 
 .view {
   display: grid;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  width: 100%;
 }
 
 .hidden {
@@ -196,7 +212,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding-top: 4px;
+  padding: 16px 0;
 }
 
 .beat {
@@ -301,19 +317,24 @@ input:focus {
 
 .status {
   min-height: 20px;
+  min-width: 36ch;
+  max-width: 100%;
   font-size: 13px;
   color: var(--muted);
   text-align: center;
+  margin: 0 auto;
 }
 
 .join-entry {
   display: grid;
   gap: 10px;
   padding-top: 8px;
+  width: 100%;
 }
 
 .code-line {
   position: relative;
+  width: 100%;
   border-bottom: 2px solid #cfd9e4;
   padding: 10px 0 8px;
   text-align: center;
@@ -354,6 +375,7 @@ input:focus {
 .join-live {
   display: grid;
   gap: 12px;
+  width: 100%;
 }
 
 .join-bpm-block {
