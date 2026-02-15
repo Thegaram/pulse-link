@@ -6,19 +6,17 @@
   import MetaRow from './components/MetaRow.svelte';
   import QrModal from './components/QrModal.svelte';
 
-  import { LeaderStateMachine } from '../state/leader-machine.js';
-  import { PeerStateMachine } from '../state/peer-machine.js';
-  import { generatePeerId } from '../types.js';
   import { createSignalingTransport } from '../signaling/factory.js';
   import { createTransportRuntime } from '../realtime/runtime.js';
   import type { TransportRuntime } from '../realtime/runtime.js';
-  import { flashBeat } from '../ui/dom.js';
-  import { BPM_UPDATE_DEBOUNCE_MS } from '../ui/app-shell-constants.js';
+  import { LeaderStateMachine } from '../state/leader-machine.js';
+  import { PeerStateMachine } from '../state/peer-machine.js';
   import type { Mode } from '../ui/app-shell-constants.js';
   import type { LoadedConfig } from './config-loader.js';
+  import { AppWorkflowController, type BackendState } from './state/controller.js';
   import { createHostViewState } from './state/host.js';
   import { createJoinViewState } from './state/join.js';
-  import { createUiState, type BackendState } from './state/ui.js';
+  import { createUiState } from './state/ui.js';
   import {
     backendLabel,
     clampBpm,
@@ -42,11 +40,10 @@
     }): unknown;
   };
 
-  const JOIN_HOST_TIMEOUT_MS = 7000;
-
   export let config: LoadedConfig;
 
   let transportRuntime: TransportRuntime;
+  let workflow: AppWorkflowController | null = null;
 
   let leader: LeaderStateMachine | null = null;
   let peer: PeerStateMachine | null = null;
@@ -59,15 +56,6 @@
   let joinBeatEl: HTMLDivElement | null = null;
   let joinInputEl: HTMLInputElement | null = null;
   let qrNodeEl: HTMLDivElement | null = null;
-
-  let joinBpmTimer: number | null = null;
-  let joinHostTimeoutId: number | null = null;
-  let hostStatusTimer: number | null = null;
-  let bpmHoldIntervalId: number | null = null;
-  let bpmHoldStartTimeoutId: number | null = null;
-  let bpmUpdateDebounceTimeoutId: number | null = null;
-
-  let suppressPointerClickUntil = 0;
 
   $: hasLeader = Boolean(leader);
   $: activePlayback = host.isRunning;
@@ -98,49 +86,18 @@
     join.inputDisabled = disabled;
   }
 
-  function clearJoinTimer(): void {
-    if (joinBpmTimer !== null) {
-      clearInterval(joinBpmTimer);
-      joinBpmTimer = null;
-    }
-  }
-
-  function clearJoinHostTimeout(): void {
-    if (joinHostTimeoutId !== null) {
-      clearTimeout(joinHostTimeoutId);
-      joinHostTimeoutId = null;
-    }
-  }
-
-  function stopHostStatusTimer(): void {
-    if (hostStatusTimer !== null) {
-      clearInterval(hostStatusTimer);
-      hostStatusTimer = null;
-    }
-  }
-
-  function refreshHostStatus(): void {
+  function setHostStatus(status: string): void {
     if (Date.now() < host.statusOverrideUntil) {
       host.status = host.statusOverrideText;
       return;
     }
-
-    const peers = leader ? leader.getPeerCount() : 0;
-    host.status = `Connected peers: ${peers}`;
-  }
-
-  function startHostStatusTimer(): void {
-    stopHostStatusTimer();
-    refreshHostStatus();
-    hostStatusTimer = window.setInterval(() => {
-      refreshHostStatus();
-    }, 500);
+    host.status = status;
   }
 
   function showHostTemporaryStatus(text: string, durationMs = 1200): void {
     host.statusOverrideText = text;
     host.statusOverrideUntil = Date.now() + durationMs;
-    refreshHostStatus();
+    setHostStatus(text);
   }
 
   function setHostRoomCode(code: string | null): void {
@@ -161,71 +118,28 @@
       return;
     }
 
-    if (bpmUpdateDebounceTimeoutId !== null) {
-      clearTimeout(bpmUpdateDebounceTimeoutId);
-    }
-
-    bpmUpdateDebounceTimeoutId = window.setTimeout(() => {
-      bpmUpdateDebounceTimeoutId = null;
+    workflow?.queueRunningBpmUpdate(() => {
       if (leader) {
         leader.setBPM(host.currentBpm);
       }
-    }, BPM_UPDATE_DEBOUNCE_MS);
-  }
-
-  function stopBpmHold(): void {
-    if (bpmHoldStartTimeoutId !== null) {
-      clearTimeout(bpmHoldStartTimeoutId);
-      bpmHoldStartTimeoutId = null;
-    }
-
-    if (bpmHoldIntervalId !== null) {
-      clearInterval(bpmHoldIntervalId);
-      bpmHoldIntervalId = null;
-    }
-  }
-
-  function applyBpmDelta(delta: number): void {
-    if (!leader) {
-      return;
-    }
-    applyHostBpm(host.currentBpm + delta);
+    });
   }
 
   function onBpmPointerDown(delta: number, event: PointerEvent): void {
-    if (!leader || event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    suppressPointerClickUntil = Date.now() + 300;
-    applyBpmDelta(delta);
-
-    stopBpmHold();
-    bpmHoldStartTimeoutId = window.setTimeout(() => {
-      bpmHoldIntervalId = window.setInterval(() => {
-        applyBpmDelta(delta);
-      }, 70);
-    }, 300);
+    workflow?.onBpmPointerDown(delta, event);
   }
 
   function onBpmClick(delta: number, event: MouseEvent): void {
-    if (!leader) {
-      return;
-    }
+    workflow?.onBpmClick(delta, event);
+  }
 
-    if (event.detail > 0 && Date.now() < suppressPointerClickUntil) {
-      return;
-    }
-
-    applyBpmDelta(delta);
+  function stopBpmHold(): void {
+    workflow?.stopBpmHold();
   }
 
   function showJoinEntry(): void {
     join.showEntry = true;
     join.showLive = false;
-    clearJoinTimer();
-    clearJoinHostTimeout();
     join.inProgress = false;
     setJoinInputDisabled(false);
     void tick().then(() => {
@@ -246,152 +160,68 @@
     ui.activeTab = tab;
   }
 
-  async function ensureHostRoom(forceNewCode = false): Promise<void> {
-    if (leader) {
-      setBackendStatus('ok');
-      return;
-    }
-
-    setBackendStatus('connecting');
-    leader = new LeaderStateMachine(generatePeerId(), transportRuntime);
-    leader.getMetronome().onBeatScheduled((_, isDownbeat) => {
-      if (hostBeatEl) {
-        flashBeat(hostBeatEl, isDownbeat);
+  function initializeWorkflow(): void {
+    workflow = new AppWorkflowController(transportRuntime, {
+      getActiveTab: () => ui.activeTab,
+      getCurrentBpm: () => host.currentBpm,
+      getJoinCode: () => join.code,
+      getLeader: () => leader,
+      setLeader: (nextLeader) => {
+        leader = nextLeader;
+      },
+      getPeer: () => peer,
+      setPeer: (nextPeer) => {
+        peer = nextPeer;
+      },
+      setHostRunning: (running) => {
+        host.isRunning = running;
+      },
+      setHostStatus,
+      setJoinStatus: (status) => {
+        join.status = status;
+      },
+      setJoinLiveStatus: (status) => {
+        join.liveStatus = status;
+      },
+      setJoinBpm: (bpm) => {
+        join.bpm = bpm;
+      },
+      setJoinInProgress: (inProgress) => {
+        join.inProgress = inProgress;
+      },
+      setJoinInputDisabled,
+      setBackendStatus,
+      loadStoredHostRoomCode,
+      setHostRoomCode,
+      showHostTemporaryStatus: (text) => {
+        showHostTemporaryStatus(text);
+      },
+      applyHostBpm,
+      errorText,
+      showJoinEntry,
+      showJoinLive,
+      enableJoinCodeReplaceOnNextEntry,
+      getHostBeatEl: () => hostBeatEl,
+      getJoinBeatEl: () => joinBeatEl,
+      focusJoinInput: () => {
+        joinInputEl?.focus();
       }
     });
-
-    const preferredRoomId = forceNewCode ? undefined : loadStoredHostRoomCode();
-    const roomId = await leader.createRoom(host.currentBpm, preferredRoomId ?? undefined);
-    setHostRoomCode(roomId);
-    host.isRunning = false;
-    setBackendStatus('ok');
-    startHostStatusTimer();
   }
 
   async function regenerateHostRoom(event: MouseEvent): Promise<void> {
     event.stopPropagation();
-
-    if (ui.activeTab !== 'host') {
-      return;
-    }
-
-    if (leader) {
-      await teardownHost();
-    }
-
-    applyHostBpm(120);
-    await ensureHostRoom(true);
-    showHostTemporaryStatus('New room code generated');
-  }
-
-  async function teardownHost(): Promise<void> {
-    if (!leader) {
-      return;
-    }
-
-    if (bpmUpdateDebounceTimeoutId !== null) {
-      clearTimeout(bpmUpdateDebounceTimeoutId);
-      bpmUpdateDebounceTimeoutId = null;
-    }
-
-    leader.stopMetronome();
-    await leader.closeRoom();
-    leader = null;
-    host.isRunning = false;
-    setHostRoomCode(null);
-    stopHostStatusTimer();
-    refreshHostStatus();
-    setBackendStatus('idle');
-  }
-
-  async function teardownPeer(): Promise<void> {
-    if (!peer) {
-      return;
-    }
-
-    await peer.leaveRoom();
-    peer = null;
-    clearJoinTimer();
-    showJoinEntry();
-    join.status = 'Enter a room code to join.';
-    setBackendStatus('idle');
+    await workflow?.regenerateHostRoom();
   }
 
   async function switchToHost(): Promise<void> {
-    await teardownPeer();
     activateTab('host');
-    await ensureHostRoom();
+    await workflow?.switchToHost();
   }
 
   async function switchToJoin(): Promise<void> {
-    await teardownHost();
     activateTab('join');
-    join.status = 'Enter a room code to join.';
-    enableJoinCodeReplaceOnNextEntry();
-    showJoinEntry();
-  }
-
-  async function joinRoom(roomId: string): Promise<void> {
-    await teardownPeer();
-    join.status = 'Joining room...';
-    setBackendStatus('connecting');
-    clearJoinHostTimeout();
-    join.inProgress = true;
-    setJoinInputDisabled(true);
-
-    peer = new PeerStateMachine(generatePeerId(), transportRuntime);
-    peer.getMetronome().onBeatScheduled((_, isDownbeat) => {
-      if (joinBeatEl) {
-        flashBeat(joinBeatEl, isDownbeat);
-      }
-    });
-
-    peer.onStart(() => {
-      clearJoinHostTimeout();
-      showJoinLive();
-      join.liveStatus = 'Running.';
-
-      join.bpm = peer?.getMetronome().getBPM() ?? host.currentBpm;
-      clearJoinTimer();
-      joinBpmTimer = window.setInterval(() => {
-        if (peer) {
-          join.bpm = peer.getMetronome().getBPM();
-        }
-      }, 300);
-    });
-
-    peer.onSyncStatus((status) => {
-      clearJoinHostTimeout();
-      setBackendStatus('ok');
-      showJoinLive();
-      join.liveStatus = status;
-    });
-
-    await peer.joinRoom(roomId);
-    join.status = 'Waiting for host...';
-    joinHostTimeoutId = window.setTimeout(() => {
-      if (!peer) {
-        return;
-      }
-
-      const state = peer.getState();
-      if (state === 'C_DISCOVERING' || state === 'C_SIGNALING') {
-        teardownPeer()
-          .then(() => {
-            join.status = 'Host not found. Try another code.';
-            enableJoinCodeReplaceOnNextEntry();
-            setBackendStatus('error', 'No host responded for this room code');
-          })
-          .catch((error) => {
-            console.error(error);
-            join.status = 'Host not found. Try another code.';
-            enableJoinCodeReplaceOnNextEntry();
-            setBackendStatus('error', errorText(error));
-          });
-      }
-    }, JOIN_HOST_TIMEOUT_MS);
-
-    join.inProgress = false;
+    await workflow?.switchToJoin();
   }
 
   function maybeAutoJoin(): void {
@@ -399,7 +229,7 @@
       return;
     }
 
-    joinRoom(join.code).catch((error) => {
+    workflow?.joinRoom(join.code).catch((error) => {
       console.error(error);
       join.inProgress = false;
       setJoinInputDisabled(false);
@@ -452,27 +282,11 @@
   }
 
   function startHostMetronome(): void {
-    if (!leader) {
-      return;
-    }
-
-    if (bpmUpdateDebounceTimeoutId !== null) {
-      clearTimeout(bpmUpdateDebounceTimeoutId);
-      bpmUpdateDebounceTimeoutId = null;
-      leader.setBPM(host.currentBpm);
-    }
-
-    leader.startMetronome();
-    host.isRunning = true;
+    workflow?.startHostMetronome();
   }
 
   function stopHostMetronome(): void {
-    if (!leader) {
-      return;
-    }
-
-    leader.stopMetronome();
-    host.isRunning = false;
+    workflow?.stopHostMetronome();
   }
 
   function onJoinCodeLineClick(): void {
@@ -536,8 +350,7 @@
 
     switchToHost().catch((error) => {
       console.error(error);
-      stopHostStatusTimer();
-      host.status = 'Connected peers: 0';
+      setHostStatus('Connected peers: 0');
       setBackendStatus('error', errorText(error));
     });
   }
@@ -560,6 +373,7 @@
       iceConfig: config.iceConfig,
       createSignaling: () => createSignalingTransport(config.signaling)
     });
+    initializeWorkflow();
 
     setBackendStatus('idle');
 
@@ -575,9 +389,9 @@
       maybeAutoJoin();
     } else {
       activateTab('host');
-      ensureHostRoom().catch((error) => {
+      workflow?.ensureHostRoom().catch((error) => {
         console.error(error);
-        host.status = 'Connected peers: 0';
+        setHostStatus('Connected peers: 0');
         setBackendStatus('error', errorText(error));
       });
     }
@@ -589,18 +403,8 @@
   });
 
   onDestroy(() => {
-    stopBpmHold();
-    clearJoinTimer();
-    clearJoinHostTimeout();
-    stopHostStatusTimer();
-
-    if (bpmUpdateDebounceTimeoutId !== null) {
-      clearTimeout(bpmUpdateDebounceTimeoutId);
-      bpmUpdateDebounceTimeoutId = null;
-    }
-
-    void teardownPeer();
-    void teardownHost();
+    workflow?.destroy();
+    workflow = null;
   });
 </script>
 
