@@ -11,6 +11,7 @@ import { LeaderState } from './types.js';
 import {
   generateRoomId,
   createMessage,
+  MessageType,
   StartAnnouncePayload,
   ParamUpdatePayload,
   TimePingPayload,
@@ -20,6 +21,7 @@ import { IceConfig } from '../webrtc/types.js';
 import { ClockSync } from '../sync/clock.js';
 
 const PING_INTERVAL_MS = 1000; // Send time ping every 1 second
+type ControlMessageType = MessageType | 'clock_offset';
 
 export class LeaderStateMachine {
   private state: LeaderState = 'L_IDLE';
@@ -34,6 +36,14 @@ export class LeaderStateMachine {
   constructor(myId: string) {
     this.myId = myId;
     this.metronome = new Metronome();
+  }
+
+  private sendControlToPeer(peerId: string, type: ControlMessageType, payload: unknown): void {
+    this.connectionManager?.sendControl(peerId, { type, payload });
+  }
+
+  private broadcastControl(type: ControlMessageType, payload: unknown): void {
+    this.connectionManager?.broadcastControl({ type, payload });
   }
 
   /**
@@ -158,12 +168,9 @@ export class LeaderStateMachine {
     );
 
     // Send offset to peer via control channel
-    this.connectionManager.sendControl(peerId, {
-      type: 'clock_offset',
-      payload: {
-        offsetMs: stats.offsetMs,
-        rtt: stats.rtt
-      }
+    this.sendControlToPeer(peerId, 'clock_offset', {
+      offsetMs: stats.offsetMs,
+      rtt: stats.rtt
     });
 
     console.log(`⏱️ Peer ${peerId} offset: ${stats.offsetMs.toFixed(2)}ms, RTT: ${stats.rtt.toFixed(2)}ms`);
@@ -197,10 +204,7 @@ export class LeaderStateMachine {
       bpm: state.bpm,
       version: state.version
     };
-    this.connectionManager.sendControl(peerId, {
-      type: 'param_update',
-      payload: paramUpdate
-    });
+    this.sendControlToPeer(peerId, 'param_update', paramUpdate);
 
     // If playback already scheduled/running, send current anchor so peer can join in-phase.
     if ((state.status === 'countdown' || state.status === 'running') && state.startAtLeaderMs !== undefined) {
@@ -211,10 +215,7 @@ export class LeaderStateMachine {
         beatIndexAtAnchor: 0
       };
 
-      this.connectionManager.sendControl(peerId, {
-        type: 'start_announce',
-        payload: announcement
-      });
+      this.sendControlToPeer(peerId, 'start_announce', announcement);
     }
   }
 
@@ -245,15 +246,7 @@ export class LeaderStateMachine {
       beatIndexAtAnchor: 0 // Start from beat 0
     };
 
-    const msg = createMessage(
-      this.roomState.getState().roomId,
-      this.myId,
-      '*',
-      'start_announce',
-      announcement
-    );
-
-    this.connectionManager.broadcastControl(msg);
+    this.broadcastControl('start_announce', announcement);
 
     // Start local metronome immediately.
     this.metronome.setBeatGrid({
@@ -279,10 +272,7 @@ export class LeaderStateMachine {
     this.state = 'L_ROOM_OPEN';
 
     // Tell peers to stop while keeping room open for future restarts.
-    this.connectionManager?.broadcastControl({
-      type: 'stop_announce',
-      payload: {}
-    });
+    this.broadcastControl('stop_announce', {});
 
     console.log('⏹ Metronome stopped');
   }
@@ -318,10 +308,7 @@ export class LeaderStateMachine {
         beatIndexAtAnchor: 0
       };
 
-      this.connectionManager.broadcastControl({
-        type: 'start_announce',
-        payload: announcement
-      });
+      this.broadcastControl('start_announce', announcement);
       return;
     }
 
@@ -332,10 +319,7 @@ export class LeaderStateMachine {
       version: state.version
     };
 
-    this.connectionManager.broadcastControl({
-      type: 'param_update',
-      payload: update
-    });
+    this.broadcastControl('param_update', update);
   }
 
   /**

@@ -34,6 +34,14 @@ export class PeerStateMachine {
     this.metronome = new Metronome();
   }
 
+  private clearPendingStart(): void {
+    if (this.pendingStartTimeoutId !== null) {
+      clearTimeout(this.pendingStartTimeoutId);
+      this.pendingStartTimeoutId = null;
+    }
+    this.pendingStartAnnouncement = null;
+  }
+
   /**
    * Join room
    */
@@ -158,10 +166,7 @@ export class PeerStateMachine {
    * Schedule local playback from leader announcement.
    */
   private scheduleStartFromAnnouncement(payload: StartAnnouncePayload): void {
-    if (this.pendingStartTimeoutId !== null) {
-      clearTimeout(this.pendingStartTimeoutId);
-      this.pendingStartTimeoutId = null;
-    }
+    this.clearPendingStart();
 
     const { bpm, anchorLeaderMs, beatIndexAtAnchor } = payload;
 
@@ -217,11 +222,7 @@ export class PeerStateMachine {
    * Handle stop notification from leader.
    */
   private handleStopAnnounce(): void {
-    if (this.pendingStartTimeoutId !== null) {
-      clearTimeout(this.pendingStartTimeoutId);
-      this.pendingStartTimeoutId = null;
-    }
-    this.pendingStartAnnouncement = null;
+    this.clearPendingStart();
     this.metronome.stop();
     this.state = 'C_SYNCING';
     this.emitSyncStatus('Connected. Waiting for host to start.');
@@ -239,11 +240,7 @@ export class PeerStateMachine {
    * Leave room
    */
   async leaveRoom(): Promise<void> {
-    if (this.pendingStartTimeoutId !== null) {
-      clearTimeout(this.pendingStartTimeoutId);
-      this.pendingStartTimeoutId = null;
-    }
-    this.pendingStartAnnouncement = null;
+    this.clearPendingStart();
 
     this.metronome.stop();
 

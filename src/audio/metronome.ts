@@ -53,20 +53,28 @@ export class Metronome {
 
     this.beatGrid = grid;
     this.bpm = grid.bpm;
-
-    // Calculate the next beat to schedule based on current time
-    const now = performance.now();
-    const msPerBeat = 60000 / this.bpm;
-    const elapsedMs = now - grid.anchorPerformanceMs;
-    const elapsedBeats = elapsedMs / msPerBeat;
-
-    // Start from next beat after current time
-    this.nextBeatIndex = grid.beatIndexAtAnchor + Math.ceil(elapsedBeats);
-    this.nextScheduleTimeMs = this.calculateBeatTime(this.nextBeatIndex);
+    this.resetScheduleCursor();
 
     if (wasRunning) {
       this.scheduleAhead();
     }
+  }
+
+  /**
+   * Recompute next beat cursor from current time and active beat grid.
+   */
+  private resetScheduleCursor(): void {
+    if (!this.beatGrid) {
+      return;
+    }
+
+    const now = performance.now();
+    const msPerBeat = 60000 / this.beatGrid.bpm;
+    const elapsedMs = now - this.beatGrid.anchorPerformanceMs;
+    const elapsedBeats = elapsedMs / msPerBeat;
+
+    this.nextBeatIndex = this.beatGrid.beatIndexAtAnchor + Math.ceil(elapsedBeats);
+    this.nextScheduleTimeMs = this.calculateBeatTime(this.nextBeatIndex);
   }
 
   /**
@@ -147,9 +155,8 @@ export class Metronome {
         beatIndexAtAnchor: currentBeatIndex
       };
 
-      // Reset next beat to schedule
-      this.nextBeatIndex = currentBeatIndex;
-      this.nextScheduleTimeMs = now;
+      // Reset schedule cursor against the new grid.
+      this.resetScheduleCursor();
 
       // Reschedule immediately
       this.scheduleAhead();
