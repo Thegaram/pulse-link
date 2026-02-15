@@ -54,7 +54,10 @@
     <div class="beat" bind:this={beatEl}></div>
   </div>
 
-  <div class="host-bpm-value">{bpm}</div>
+  <div class="join-bpm-block">
+    <div class="host-bpm-value">{bpm}</div>
+    <div class="join-bpm-label">BPM</div>
+  </div>
 
   <div class="control-row">
     <button

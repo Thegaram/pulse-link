@@ -387,6 +387,10 @@ input:focus {
   width: 100%;
 }
 
+.join-room-ref {
+  cursor: default;
+}
+
 .join-bpm-block {
   text-align: center;
 }

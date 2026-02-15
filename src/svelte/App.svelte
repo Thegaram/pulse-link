@@ -69,6 +69,7 @@
   $: bpmDisabled = !hasLeader;
   $: startDisabled = !hasLeader || activePlayback;
   $: stopDisabled = !hasLeader || (!activePlayback && !$hostState.hasPendingResume);
+  $: joinRoomCodeDisplay = $sessionState.peer?.getRoomId() ?? ($joinState.code || '------');
   $: {
     if ($uiState.activeTab === 'host') {
       setRoomCodeInUrl($hostState.currentRoomId);
@@ -295,6 +296,14 @@
     }
   }
 
+  function onJoinEditRoom(): void {
+    workflow?.teardownPeer().catch((error) => {
+      console.error(error);
+      setJoinStatus('Failed to leave room.');
+      setBackendStatusWithDetail('error', errorText(error));
+    });
+  }
+
   function onJoinCodeInput(event: Event): void {
     const target = event.currentTarget as HTMLInputElement;
     setJoinCodeValue(target.value);
@@ -423,6 +432,7 @@
         showEntry={$joinState.showEntry}
         showLive={$joinState.showLive}
         joinCode={$joinState.code}
+        roomCodeDisplay={joinRoomCodeDisplay}
         joinCodeVisual={$joinCodeVisual}
         joinStatus={$joinState.status}
         joinLiveStatus={$joinState.liveStatus}
@@ -431,6 +441,7 @@
         bind:inputEl={joinInputEl}
         bind:beatEl={joinBeatEl}
         onCodeLineClick={onJoinCodeLineClick}
+        onEditRoom={onJoinEditRoom}
         onCodeInput={onJoinCodeInput}
         onCodeKeydown={onJoinCodeKeydown}
         onCodePaste={onJoinCodePaste}
