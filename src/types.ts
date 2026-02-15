@@ -121,6 +121,7 @@ export interface RoomState {
   version: number;
   status: "open" | "countdown" | "running" | "closed";
   startAtLeaderMs?: number;
+  beatIndexAtAnchor?: number;
   peers: Record<string, PeerConnState>;
 }
 

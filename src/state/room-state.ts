@@ -71,6 +71,14 @@ export class RoomStateManager {
   }
 
   /**
+   * Set beat anchor (timestamp + absolute beat index)
+   */
+  setBeatAnchor(timeMs: number, beatIndexAtAnchor: number): void {
+    this.state.startAtLeaderMs = timeMs;
+    this.state.beatIndexAtAnchor = beatIndexAtAnchor;
+  }
+
+  /**
    * Get current state
    */
   getState(): RoomState {

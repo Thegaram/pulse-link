@@ -212,7 +212,7 @@ export class LeaderStateMachine {
         bpm: state.bpm,
         version: state.version,
         anchorLeaderMs: state.startAtLeaderMs,
-        beatIndexAtAnchor: 0
+        beatIndexAtAnchor: state.beatIndexAtAnchor ?? 0
       };
 
       this.sendControlToPeer(peerId, 'start_announce', announcement);
@@ -234,7 +234,7 @@ export class LeaderStateMachine {
     const bpm = this.roomState.getState().bpm;
     const startAtLeaderMs = performance.now();
 
-    this.roomState.setStartTime(startAtLeaderMs);
+    this.roomState.setBeatAnchor(startAtLeaderMs, 0);
     this.roomState.setStatus('running');
     this.state = 'L_RUNNING';
 
@@ -285,34 +285,32 @@ export class LeaderStateMachine {
       return;
     }
 
-    this.roomState.setBPM(bpm);
-
-    const state = this.roomState.getState();
-    const running = this.state === 'L_RUNNING' && state.startAtLeaderMs !== undefined;
-
-    if (running) {
-      // Re-anchor on BPM changes so existing peers and late joiners share one timeline.
-      const reanchorLeaderMs = performance.now() + 250;
-      this.roomState.setStartTime(reanchorLeaderMs);
-
-      this.metronome.setBeatGrid({
-        bpm,
-        anchorPerformanceMs: reanchorLeaderMs,
-        beatIndexAtAnchor: 0
-      });
-
-      const announcement: StartAnnouncePayload = {
-        bpm,
-        version: this.roomState.getState().version,
-        anchorLeaderMs: reanchorLeaderMs,
-        beatIndexAtAnchor: 0
-      };
-
-      this.broadcastControl('start_announce', announcement);
+    const previous = this.roomState.getState();
+    if (previous.bpm === bpm) {
       return;
     }
 
-    this.metronome.setBPM(bpm);
+    this.roomState.setBPM(bpm);
+
+    const state = this.roomState.getState();
+    const previousStartAtLeaderMs = previous.startAtLeaderMs;
+    const running = this.state === 'L_RUNNING' && previousStartAtLeaderMs !== undefined;
+
+    if (running) {
+      // Preserve beat continuity at the current beat when changing tempo.
+      const now = performance.now();
+      const msPerBeatOld = 60000 / previous.bpm;
+      const baseBeatIndex = previous.beatIndexAtAnchor ?? 0;
+      const elapsedMs = Math.max(0, now - previousStartAtLeaderMs);
+      const elapsedBeats = Math.floor(elapsedMs / msPerBeatOld);
+      const currentBeatIndex = baseBeatIndex + elapsedBeats;
+
+      // Update leader's local tempo smoothly.
+      this.metronome.setBPM(bpm);
+
+      // Store new anchor for late joiners so they align with the current phase.
+      this.roomState.setBeatAnchor(now, currentBeatIndex);
+    }
 
     const update: ParamUpdatePayload = {
       bpm,
