@@ -178,8 +178,8 @@ body {
   top: 50%;
   right: 8px;
   transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -203,8 +203,8 @@ body {
 }
 
 .qr-icon-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   fill: currentColor;
 }
 
@@ -341,27 +341,31 @@ input:focus {
   width: 100%;
 }
 
-.code-line {
+.room-entry {
   position: relative;
-  width: 100%;
-  border-bottom: 2px solid #cfd9e4;
-  padding: 10px 0 8px;
-  text-align: center;
   cursor: text;
 }
 
-.code-line.disabled {
+.room-entry.disabled {
   opacity: 0.6;
   cursor: default;
 }
 
-.code-line-visual {
-  display: block;
-  font-size: 30px;
-  letter-spacing: 8px;
-  font-weight: 700;
-  color: var(--ink);
+.room-code-entry {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
   user-select: none;
+}
+
+.room-code-slot {
+  min-width: 0.85ch;
+  text-align: center;
+  color: var(--ink);
+}
+
+.room-code-slot.empty {
+  color: #b8c4d3;
 }
 
 .code-line-input {
@@ -377,10 +381,6 @@ input:focus {
   background: transparent;
 }
 
-.code-line:focus-within {
-  border-bottom-color: #9bb3d0;
-}
-
 .join-live {
   display: grid;
   gap: 12px;
@@ -392,7 +392,10 @@ input:focus {
 }
 
 .join-bpm-block {
-  text-align: center;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
 }
 
 .join-bpm-value {
@@ -407,6 +410,7 @@ input:focus {
   font-size: 13px;
   color: var(--muted);
   letter-spacing: 1px;
+  transform: translateY(-8px);
 }
 
 .modal {

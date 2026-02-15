@@ -26,7 +26,6 @@
     showHostTemporaryStatus
   } from './state/host.js';
   import {
-    joinCodeVisual,
     joinState,
     setJoinBpm,
     setJoinClearCodeOnNextEntry,
@@ -433,7 +432,6 @@
         showLive={$joinState.showLive}
         joinCode={$joinState.code}
         roomCodeDisplay={joinRoomCodeDisplay}
-        joinCodeVisual={$joinCodeVisual}
         joinStatus={$joinState.status}
         joinLiveStatus={$joinState.liveStatus}
         joinBpm={$joinState.bpm}
