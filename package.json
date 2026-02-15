@@ -1,0 +1,17 @@
+{
+  "name": "pulse-link",
+  "version": "0.1.0",
+  "description": "P2P WebRTC synchronized metronome for musicians",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "serve": "python3 -m http.server 8000"
+  },
+  "keywords": ["metronome", "webrtc", "p2p", "music", "sync"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

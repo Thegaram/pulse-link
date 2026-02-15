@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Pulse Link - Synchronized metronome for musicians via P2P WebRTC">
+  <title>Pulse Link - Synchronized Metronome</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Home View -->
+  <div id="homeView" class="view">
+    <div class="container">
+      <div class="header">
+        <h1>🎵 Pulse Link</h1>
+        <p class="subtitle">Synchronized metronome for musicians</p>
+      </div>
+
+      <div class="actions">
+        <button id="createRoomBtn" class="btn btn-primary">
+          Create Room
+        </button>
+        <button id="joinRoomBtn" class="btn btn-secondary">
+          Join Room
+        </button>
+      </div>
+
+      <div class="info-box">
+        <p>Pulse Link synchronizes a metronome across multiple devices using P2P WebRTC.</p>
+        <p>Perfect for remote rehearsals, practice sessions, or live performances.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Room View (Leader) -->
+  <div id="createView" class="view" style="display: none;">
+    <div class="container">
+      <div class="header">
+        <h1>Create Room</h1>
+        <p class="subtitle">Set tempo and start session</p>
+      </div>
+
+      <div class="bpm-section">
+        <div class="bpm-display" id="bpmDisplay">120</div>
+        <div class="bpm-label">BPM</div>
+
+        <div class="slider-container">
+          <input type="range" id="bpmSlider" min="40" max="240" value="120" step="1">
+          <div class="range-labels">
+            <span>40</span>
+            <span>140</span>
+            <span>240</span>
+          </div>
+        </div>
+      </div>
+
+      <button id="createAndOpenBtn" class="btn btn-primary btn-large">
+        Create Room
+      </button>
+
+      <div id="roomCreatedSection" style="display: none;">
+        <div class="room-code-section">
+          <p class="label">Share this code:</p>
+          <div class="room-code" id="roomCodeDisplay">------</div>
+          <p class="hint">Others can join by entering this code</p>
+        </div>
+
+        <div class="qr-section" id="qrSection">
+          <div id="qrcode"></div>
+          <p class="hint">Or scan this QR code</p>
+        </div>
+
+        <button id="startMetronomeBtn" class="btn btn-success btn-large">
+          Start Metronome
+        </button>
+
+        <div id="leaderStatus" class="status"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Room View (Peer) -->
+  <div id="joinView" class="view" style="display: none;">
+    <div class="container">
+      <div class="header">
+        <h1>Join Room</h1>
+        <p class="subtitle">Enter room code to join session</p>
+      </div>
+
+      <div class="input-group">
+        <label for="roomIdInput">Room Code</label>
+        <input
+          type="text"
+          id="roomIdInput"
+          placeholder="Enter 6-digit code"
+          maxlength="6"
+          autocomplete="off"
+        >
+      </div>
+
+      <button id="joinRoomSubmitBtn" class="btn btn-primary btn-large">
+        Join Room
+      </button>
+
+      <div id="peerStatus" class="status" style="display: none;"></div>
+
+      <div class="info-box" style="margin-top: 24px;">
+        <p><strong>Tip:</strong> Make sure you're on the same network or have a stable internet connection for best results.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playing View -->
+  <div id="playingView" class="view" style="display: none;">
+    <div class="container">
+      <div class="header">
+        <h1 id="playingRoomCode">Room: ------</h1>
+        <p class="subtitle" id="playingRole">Leader</p>
+      </div>
+
+      <div class="beat-display">
+        <div class="beat-indicator" id="beatIndicator"></div>
+      </div>
+
+      <div class="tempo-display">
+        <div class="tempo-value" id="tempoValue">120</div>
+        <div class="tempo-label">BPM</div>
+      </div>
+
+      <div class="playback-controls" id="leaderControls" style="display: none;">
+        <button id="stopMetronomeBtn" class="btn btn-danger">
+          Stop Metronome
+        </button>
+      </div>
+
+      <div class="playback-controls" id="peerControls" style="display: none;">
+        <button id="leaveRoomBtn" class="btn btn-secondary">
+          Leave Room
+        </button>
+      </div>
+
+      <div class="sync-stats" id="syncStats" style="display: none;">
+        <div class="stat-item">
+          <span class="stat-label">Status:</span>
+          <span class="stat-value" id="syncStatus">Syncing...</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Offset:</span>
+          <span class="stat-value" id="syncOffset">--</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Code Library (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Main App -->
+  <script type="module">
+    import { App } from './dist/ui/app.js';
+    import { ICE_CONFIG } from './config.js';
+    import { show, hide, setText, getRoomUrl } from './dist/ui/components.js';
+
+    // Initialize app
+    const app = new App(ICE_CONFIG);
+
+    // BPM slider
+    const bpmSlider = document.getElementById('bpmSlider');
+    const bpmDisplay = document.getElementById('bpmDisplay');
+
+    if (bpmSlider && bpmDisplay) {
+      bpmSlider.addEventListener('input', (e) => {
+        bpmDisplay.textContent = e.target.value;
+      });
+    }
+
+    // Create room button
+    const createAndOpenBtn = document.getElementById('createAndOpenBtn');
+    const roomCreatedSection = document.getElementById('roomCreatedSection');
+    const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+    const qrSection = document.getElementById('qrSection');
+
+    if (createAndOpenBtn) {
+      createAndOpenBtn.addEventListener('click', async () => {
+        const bpm = parseInt(bpmSlider.value);
+        const leader = app.getLeaderMachine();
+
+        if (!leader) return;
+
+        createAndOpenBtn.disabled = true;
+        createAndOpenBtn.textContent = 'Creating...';
+
+        try {
+          const roomId = await leader.createRoom(bpm, app.getIceConfig());
+
+          // Show room code
+          roomCodeDisplay.textContent = roomId;
+          show(roomCreatedSection);
+
+          // Generate QR code
+          const qrDiv = document.getElementById('qrcode');
+          if (qrDiv) {
+            qrDiv.innerHTML = '';
+            new QRCode(qrDiv, {
+              text: getRoomUrl(roomId),
+              width: 200,
+              height: 200,
+              colorDark: '#00d4ff',
+              colorLight: '#1a1a1a'
+            });
+          }
+
+        } catch (err) {
+          console.error('Failed to create room:', err);
+          alert('Failed to create room');
+          createAndOpenBtn.disabled = false;
+          createAndOpenBtn.textContent = 'Create Room';
+        }
+      });
+    }
+
+    // Start metronome button
+    const startMetronomeBtn = document.getElementById('startMetronomeBtn');
+    if (startMetronomeBtn) {
+      startMetronomeBtn.addEventListener('click', () => {
+        const leader = app.getLeaderMachine();
+        if (!leader) return;
+
+        leader.startMetronome();
+        app.showPlayingView();
+
+        // Setup playing view
+        setupPlayingView();
+      });
+    }
+
+    // Join room button
+    const joinRoomSubmitBtn = document.getElementById('joinRoomSubmitBtn');
+    const roomIdInput = document.getElementById('roomIdInput');
+    const peerStatus = document.getElementById('peerStatus');
+
+    if (joinRoomSubmitBtn && roomIdInput) {
+      joinRoomSubmitBtn.addEventListener('click', async () => {
+        const roomId = roomIdInput.value.trim().toUpperCase();
+        if (!roomId || roomId.length !== 6) {
+          alert('Please enter a valid 6-character room code');
+          return;
+        }
+
+        const peer = app.getPeerMachine();
+        if (!peer) return;
+
+        joinRoomSubmitBtn.disabled = true;
+        roomIdInput.disabled = true;
+        setText(peerStatus, 'Connecting to room...');
+        show(peerStatus);
+
+        try {
+          await peer.joinRoom(roomId, app.getIceConfig());
+          setText(peerStatus, 'Connected! Waiting for session to start...');
+
+          // When metronome starts, show playing view
+          // (In production, this would be triggered by start_announce)
+          setTimeout(() => {
+            app.showPlayingView();
+            setupPlayingView();
+          }, 2000);
+
+        } catch (err) {
+          console.error('Failed to join room:', err);
+          setText(peerStatus, 'Failed to join room. Please try again.');
+          joinRoomSubmitBtn.disabled = false;
+          roomIdInput.disabled = false;
+        }
+      });
+    }
+
+    // Setup playing view
+    function setupPlayingView() {
+      const role = app.getRole();
+      const playingRoomCode = document.getElementById('playingRoomCode');
+      const playingRole = document.getElementById('playingRole');
+      const tempoValue = document.getElementById('tempoValue');
+      const leaderControls = document.getElementById('leaderControls');
+      const peerControls = document.getElementById('peerControls');
+
+      if (role === 'leader') {
+        const leader = app.getLeaderMachine();
+        if (leader) {
+          playingRoomCode.textContent = `Room: ${leader.getRoomId()}`;
+          playingRole.textContent = 'Leader';
+          tempoValue.textContent = leader.getBPM().toString();
+          show(leaderControls);
+          hide(peerControls);
+        }
+      } else if (role === 'peer') {
+        const peer = app.getPeerMachine();
+        if (peer) {
+          playingRoomCode.textContent = `Room: ${peer.getRoomId()}`;
+          playingRole.textContent = 'Peer';
+          show(peerControls);
+          hide(leaderControls);
+        }
+      }
+
+      // Start beat indicator animation
+      startBeatAnimation();
+    }
+
+    // Beat animation
+    let beatInterval = null;
+    let beatCount = 0;
+
+    function startBeatAnimation() {
+      const beatIndicator = document.getElementById('beatIndicator');
+      const role = app.getRole();
+      const bpm = role === 'leader'
+        ? app.getLeaderMachine()?.getBPM()
+        : 120; // Default for peer
+
+      if (!bpm) return;
+
+      const intervalMs = 60000 / bpm;
+
+      beatInterval = setInterval(() => {
+        if (beatIndicator) {
+          const isDownbeat = (beatCount % 4) === 0;
+          beatIndicator.classList.remove('flash', 'downbeat');
+          void beatIndicator.offsetWidth; // Force reflow
+          beatIndicator.classList.add('flash');
+          if (isDownbeat) {
+            beatIndicator.classList.add('downbeat');
+          }
+          beatCount++;
+        }
+      }, intervalMs);
+    }
+
+    // Stop metronome button
+    const stopMetronomeBtn = document.getElementById('stopMetronomeBtn');
+    if (stopMetronomeBtn) {
+      stopMetronomeBtn.addEventListener('click', async () => {
+        const leader = app.getLeaderMachine();
+        if (leader) {
+          leader.stopMetronome();
+          await leader.closeRoom();
+        }
+        if (beatInterval) {
+          clearInterval(beatInterval);
+        }
+        window.location.reload();
+      });
+    }
+
+    // Leave room button
+    const leaveRoomBtn = document.getElementById('leaveRoomBtn');
+    if (leaveRoomBtn) {
+      leaveRoomBtn.addEventListener('click', async () => {
+        const peer = app.getPeerMachine();
+        if (peer) {
+          await peer.leaveRoom();
+        }
+        if (beatInterval) {
+          clearInterval(beatInterval);
+        }
+        window.location.reload();
+      });
+    }
+
+    console.log('🎵 Pulse Link loaded');
+  </script>
+</body>
+</html>
