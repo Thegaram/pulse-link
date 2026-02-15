@@ -1,4 +1,4 @@
-import { MAX_BPM, MIN_BPM, type Mode } from '../../ui/app-shell-constants.js';
+import { MAX_BPM, MIN_BPM, type Mode } from './constants.js';
 import type { SignalingBackend } from '../../signaling/factory.js';
 import type { BackendState } from './ui.js';
 

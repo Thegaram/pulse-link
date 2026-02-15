@@ -2,15 +2,15 @@ import type { TransportRuntime } from '../../realtime/runtime.js';
 import { HostController } from './host-controller.js';
 import { JoinController } from './join-controller.js';
 import { TimerLifecycle } from './timer-lifecycle.js';
-import type { WorkflowCallbacks } from './workflow-types.js';
-export type { BackendState, WorkflowCallbacks } from './workflow-types.js';
+import type { ControllerCallbacks } from './controller-types.js';
+export type { BackendState, ControllerCallbacks } from './controller-types.js';
 
 export class AppWorkflowController {
   private readonly timers = new TimerLifecycle();
   private readonly hostController: HostController;
   private readonly joinController: JoinController;
 
-  constructor(transportRuntime: TransportRuntime, cb: WorkflowCallbacks) {
+  constructor(transportRuntime: TransportRuntime, cb: ControllerCallbacks) {
     this.hostController = new HostController(transportRuntime, cb, this.timers);
     this.joinController = new JoinController(transportRuntime, cb, this.timers);
   }
@@ -79,4 +79,3 @@ export class AppWorkflowController {
     void this.hostController.teardownHost();
   }
 }
-

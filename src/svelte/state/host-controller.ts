@@ -1,14 +1,14 @@
 import { LeaderStateMachine } from '../../state/leader-machine.js';
 import { generatePeerId } from '../../types.js';
-import { flashBeat } from '../../ui/dom.js';
+import { flashBeat } from '../services/beat-visual.js';
 import type { TransportRuntime } from '../../realtime/runtime.js';
-import type { WorkflowCallbacks } from './workflow-types.js';
+import type { ControllerCallbacks } from './controller-types.js';
 import { TimerLifecycle } from './timer-lifecycle.js';
 
 export class HostController {
   constructor(
     private readonly transportRuntime: TransportRuntime,
-    private readonly cb: WorkflowCallbacks,
+    private readonly cb: ControllerCallbacks,
     private readonly timers: TimerLifecycle
   ) {}
 
@@ -144,4 +144,3 @@ export class HostController {
     this.cb.setHostRunning(false);
   }
 }
-

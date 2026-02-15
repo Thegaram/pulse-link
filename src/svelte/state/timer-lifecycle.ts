@@ -1,4 +1,4 @@
-import { BPM_UPDATE_DEBOUNCE_MS } from '../../ui/app-shell-constants.js';
+import { BPM_UPDATE_DEBOUNCE_MS } from './constants.js';
 
 export class TimerLifecycle {
   private joinBpmTimer: number | null = null;
@@ -107,4 +107,3 @@ export class TimerLifecycle {
     }
   }
 }
-

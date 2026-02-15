@@ -1,5 +1,5 @@
 import { derived, writable } from 'svelte/store';
-import type { Mode } from '../../ui/app-shell-constants.js';
+import type { Mode } from './constants.js';
 import { formatBackendText } from './runtime-ops.js';
 
 export type BackendState = 'idle' | 'connecting' | 'ok' | 'error';
@@ -41,4 +41,3 @@ export function setBackendStatus(backendState: BackendState, backendTitle = ''):
 export function setQrOpen(qrOpen: boolean): void {
   update((state) => ({ ...state, qrOpen }));
 }
-

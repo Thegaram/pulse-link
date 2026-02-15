@@ -10,9 +10,10 @@
   import { createSignalingTransport } from '../signaling/factory.js';
   import { createTransportRuntime } from '../realtime/runtime.js';
   import type { TransportRuntime } from '../realtime/runtime.js';
-  import type { Mode } from '../ui/app-shell-constants.js';
   import type { LoadedConfig } from './config-loader.js';
+  import type { Mode } from './state/constants.js';
   import { AppWorkflowController, type BackendState } from './state/controller.js';
+  import { ViewController } from './state/view-controller.js';
   import {
     hostRoomCodeDisplay,
     hostState,
@@ -51,6 +52,7 @@
 
   let transportRuntime: TransportRuntime;
   let workflow: AppWorkflowController | null = null;
+  let viewController: ViewController | null = null;
 
   let hostBeatEl: HTMLDivElement | null = null;
   let joinBeatEl: HTMLDivElement | null = null;
@@ -169,6 +171,31 @@
     });
   }
 
+  function initializeAppController(): void {
+    viewController = new ViewController({
+      getUiState: () => get(uiState),
+      getJoinState: () => get(joinState),
+      setJoinCode: (code) => {
+        setJoinCodeValue(code);
+      },
+      setJoinClearCodeOnNextEntry,
+      maybeAutoJoin,
+      closeQrModal,
+      switchToHost,
+      switchToJoin,
+      onHostError: (error) => {
+        console.error(error);
+        setHostPeerCount(0);
+        setBackendStatusWithDetail('error', errorText(error));
+      },
+      onJoinError: (error) => {
+        console.error(error);
+        setJoinStatus('Failed to open join mode.');
+        setBackendStatusWithDetail('error', errorText(error));
+      }
+    });
+  }
+
   async function regenerateHostRoom(event: MouseEvent): Promise<void> {
     event.stopPropagation();
     await workflow?.regenerateHostRoom();
@@ -258,70 +285,23 @@
   }
 
   function onJoinCodeKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-      maybeAutoJoin();
-      return;
-    }
-
-    const state = get(joinState);
-    if (!state.clearCodeOnNextEntry) {
-      return;
-    }
-
-    if (event.metaKey || event.ctrlKey || event.altKey) {
-      return;
-    }
-
-    const printable = event.key.length === 1;
-    if (printable) {
-      setJoinCode('');
-      setJoinClearCodeOnNextEntry(false);
-      return;
-    }
-
-    if (event.key === 'Backspace' || event.key === 'Delete') {
-      setJoinCode('');
-      setJoinClearCodeOnNextEntry(false);
-      event.preventDefault();
-    }
+    viewController?.onJoinCodeKeydown(event);
   }
 
   function onJoinCodePaste(event: ClipboardEvent): void {
-    event.preventDefault();
-    const pasted = (event.clipboardData?.getData('text') ?? '').toUpperCase();
-    setJoinClearCodeOnNextEntry(false);
-    setJoinCodeValue(pasted);
-    maybeAutoJoin();
+    viewController?.onJoinCodePaste(event);
   }
 
   function onDocumentKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape' && get(uiState).qrOpen) {
-      closeQrModal();
-    }
+    viewController?.onDocumentKeydown(event);
   }
 
   function onHostTabClick(): void {
-    if (get(uiState).activeTab === 'host') {
-      return;
-    }
-
-    switchToHost().catch((error) => {
-      console.error(error);
-      setHostPeerCount(0);
-      setBackendStatusWithDetail('error', errorText(error));
-    });
+    viewController?.onHostTabClick();
   }
 
   function onJoinTabClick(): void {
-    if (get(uiState).activeTab === 'join') {
-      return;
-    }
-
-    switchToJoin().catch((error) => {
-      console.error(error);
-      setJoinStatus('Failed to open join mode.');
-      setBackendStatusWithDetail('error', errorText(error));
-    });
+    viewController?.onJoinTabClick();
   }
 
   onMount(() => {
@@ -331,6 +311,7 @@
       createSignaling: () => createSignalingTransport(config.signaling)
     });
     initializeWorkflow();
+    initializeAppController();
 
     setBackendLabel(backendLabel(config.signaling.backend));
     setBackendStatusWithDetail('idle');
@@ -363,6 +344,7 @@
   onDestroy(() => {
     workflow?.destroy();
     workflow = null;
+    viewController = null;
   });
 </script>
 

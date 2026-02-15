@@ -1,16 +1,16 @@
 import { PeerStateMachine } from '../../state/peer-machine.js';
 import { generatePeerId } from '../../types.js';
-import { flashBeat } from '../../ui/dom.js';
+import { flashBeat } from '../services/beat-visual.js';
 import type { TransportRuntime } from '../../realtime/runtime.js';
 import { TimerLifecycle } from './timer-lifecycle.js';
-import type { WorkflowCallbacks } from './workflow-types.js';
+import type { ControllerCallbacks } from './controller-types.js';
 
 const JOIN_HOST_TIMEOUT_MS = 7000;
 
 export class JoinController {
   constructor(
     private readonly transportRuntime: TransportRuntime,
-    private readonly cb: WorkflowCallbacks,
+    private readonly cb: ControllerCallbacks,
     private readonly timers: TimerLifecycle
   ) {}
 
@@ -117,4 +117,3 @@ export class JoinController {
     });
   }
 }
-

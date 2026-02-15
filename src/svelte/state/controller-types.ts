@@ -1,10 +1,10 @@
 import type { LeaderStateMachine } from '../../state/leader-machine.js';
 import type { PeerStateMachine } from '../../state/peer-machine.js';
-import type { Mode } from '../../ui/app-shell-constants.js';
+import type { Mode } from './constants.js';
 
 export type BackendState = 'idle' | 'connecting' | 'ok' | 'error';
 
-export interface WorkflowCallbacks {
+export interface ControllerCallbacks {
   getActiveTab(): Mode;
   getCurrentBpm(): number;
   getJoinCode(): string;
@@ -41,4 +41,3 @@ export interface WorkflowCallbacks {
 
   focusJoinInput(): void;
 }
-

@@ -1,4 +1,4 @@
-import { HOST_ROOM_STORAGE_KEY } from '../../ui/app-shell-constants.js';
+import { HOST_ROOM_STORAGE_KEY } from '../state/constants.js';
 import { sanitizeCode } from '../state/runtime-ops.js';
 
 declare const QRCode: {
@@ -76,4 +76,3 @@ export function renderQrCode(
     colorLight: options.colorLight
   });
 }
-
