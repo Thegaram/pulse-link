@@ -25,6 +25,7 @@ export type MessageType =
   | "ice"
   // Control channel messages (WebRTC DataChannel)
   | "start_announce"
+  | "stop_announce"
   | "param_update"
   | "room_closed"
   // Time sync channel messages (WebRTC DataChannel)

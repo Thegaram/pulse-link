@@ -8,11 +8,17 @@ import { MockSignaling } from '../signaling/mock.js';
 import { RoomStateManager } from './room-state.js';
 import { Metronome } from '../audio/metronome.js';
 import { LeaderState } from './types.js';
-import { generateRoomId, createMessage, StartAnnouncePayload, TimePingPayload, TimePongPayload } from '../types.js';
+import {
+  generateRoomId,
+  createMessage,
+  StartAnnouncePayload,
+  ParamUpdatePayload,
+  TimePingPayload,
+  TimePongPayload
+} from '../types.js';
 import { IceConfig } from '../webrtc/types.js';
 import { ClockSync } from '../sync/clock.js';
 
-const COUNTDOWN_MS = 3000; // 3 second countdown before start
 const PING_INTERVAL_MS = 1000; // Send time ping every 1 second
 
 export class LeaderStateMachine {
@@ -33,12 +39,12 @@ export class LeaderStateMachine {
   /**
    * Create room and open for peers
    */
-  async createRoom(bpm: number, iceConfig: IceConfig): Promise<string> {
+  async createRoom(bpm: number, iceConfig: IceConfig, preferredRoomId?: string): Promise<string> {
     if (this.state !== 'L_IDLE') {
       throw new Error('Room already exists');
     }
 
-    const roomId = generateRoomId();
+    const roomId = preferredRoomId ?? generateRoomId();
     this.roomState = new RoomStateManager(roomId, this.myId, bpm);
 
     // Create signaling
@@ -71,6 +77,7 @@ export class LeaderStateMachine {
       this.roomState?.addPeer(peerId);
       this.roomState?.markPeerConnected(peerId);
       this.startTimeSyncWithPeer(peerId);
+      this.syncPeerState(peerId);
     });
 
     // Handle peer disconnections - stop time sync
@@ -98,28 +105,37 @@ export class LeaderStateMachine {
     this.clockSyncs.set(peerId, new ClockSync());
     this.pingSeq.set(peerId, 0);
 
-    // Start sending pings
+    // Send first ping immediately, then continue periodically.
+    this.sendTimePingToPeer(peerId);
+
     const intervalId = window.setInterval(() => {
-      if (!this.connectionManager) {
-        return;
-      }
-
-      const seq = this.pingSeq.get(peerId) ?? 0;
-      this.pingSeq.set(peerId, seq + 1);
-
-      const t1 = performance.now();
-      const ping: TimePingPayload = {
-        seq,
-        t1LeaderMs: t1
-      };
-
-      this.connectionManager.sendTimeSync(peerId, {
-        type: 'time_ping',
-        payload: ping
-      });
+      this.sendTimePingToPeer(peerId);
     }, PING_INTERVAL_MS);
 
     this.pingIntervals.set(peerId, intervalId);
+  }
+
+  /**
+   * Send one time-sync ping to a peer.
+   */
+  private sendTimePingToPeer(peerId: string): void {
+    if (!this.connectionManager) {
+      return;
+    }
+
+    const seq = this.pingSeq.get(peerId) ?? 0;
+    this.pingSeq.set(peerId, seq + 1);
+
+    const t1 = performance.now();
+    const ping: TimePingPayload = {
+      seq,
+      t1LeaderMs: t1
+    };
+
+    this.connectionManager.sendTimeSync(peerId, {
+      type: 'time_ping',
+      payload: ping
+    });
   }
 
   /**
@@ -167,6 +183,42 @@ export class LeaderStateMachine {
   }
 
   /**
+   * Send current room/playback state to a newly connected peer.
+   */
+  private syncPeerState(peerId: string): void {
+    if (!this.connectionManager || !this.roomState) {
+      return;
+    }
+
+    const state = this.roomState.getState();
+
+    // Always send latest BPM/version so late joiners are aligned.
+    const paramUpdate: ParamUpdatePayload = {
+      bpm: state.bpm,
+      version: state.version
+    };
+    this.connectionManager.sendControl(peerId, {
+      type: 'param_update',
+      payload: paramUpdate
+    });
+
+    // If playback already scheduled/running, send current anchor so peer can join in-phase.
+    if ((state.status === 'countdown' || state.status === 'running') && state.startAtLeaderMs !== undefined) {
+      const announcement: StartAnnouncePayload = {
+        bpm: state.bpm,
+        version: state.version,
+        anchorLeaderMs: state.startAtLeaderMs,
+        beatIndexAtAnchor: 0
+      };
+
+      this.connectionManager.sendControl(peerId, {
+        type: 'start_announce',
+        payload: announcement
+      });
+    }
+  }
+
+  /**
    * Start metronome with countdown
    */
   startMetronome(): void {
@@ -179,10 +231,11 @@ export class LeaderStateMachine {
     }
 
     const bpm = this.roomState.getState().bpm;
-    const startAtLeaderMs = performance.now() + COUNTDOWN_MS;
+    const startAtLeaderMs = performance.now();
 
     this.roomState.setStartTime(startAtLeaderMs);
-    this.roomState.setStatus('countdown');
+    this.roomState.setStatus('running');
+    this.state = 'L_RUNNING';
 
     // Broadcast start announcement to all peers
     const announcement: StartAnnouncePayload = {
@@ -202,22 +255,15 @@ export class LeaderStateMachine {
 
     this.connectionManager.broadcastControl(msg);
 
-    // Start local metronome after countdown
-    setTimeout(() => {
-      this.metronome.setBeatGrid({
-        bpm,
-        anchorPerformanceMs: startAtLeaderMs,
-        beatIndexAtAnchor: 0
-      });
+    // Start local metronome immediately.
+    this.metronome.setBeatGrid({
+      bpm,
+      anchorPerformanceMs: startAtLeaderMs,
+      beatIndexAtAnchor: 0
+    });
+    this.metronome.start(bpm);
 
-      this.metronome.start(bpm);
-      this.roomState!.setStatus('running');
-      this.state = 'L_RUNNING';
-
-      console.log(`✅ Metronome started at ${bpm} BPM`);
-    }, COUNTDOWN_MS);
-
-    console.log(`⏳ Countdown started (${COUNTDOWN_MS}ms)`);
+    console.log(`✅ Metronome started at ${bpm} BPM`);
   }
 
   /**
@@ -232,6 +278,12 @@ export class LeaderStateMachine {
     this.roomState?.setStatus('open');
     this.state = 'L_ROOM_OPEN';
 
+    // Tell peers to stop while keeping room open for future restarts.
+    this.connectionManager?.broadcastControl({
+      type: 'stop_announce',
+      payload: {}
+    });
+
     console.log('⏹ Metronome stopped');
   }
 
@@ -239,14 +291,51 @@ export class LeaderStateMachine {
    * Update BPM (for future: while running)
    */
   setBPM(bpm: number): void {
-    if (!this.roomState) {
+    if (!this.roomState || !this.connectionManager) {
       return;
     }
 
     this.roomState.setBPM(bpm);
+
+    const state = this.roomState.getState();
+    const running = this.state === 'L_RUNNING' && state.startAtLeaderMs !== undefined;
+
+    if (running) {
+      // Re-anchor on BPM changes so existing peers and late joiners share one timeline.
+      const reanchorLeaderMs = performance.now() + 250;
+      this.roomState.setStartTime(reanchorLeaderMs);
+
+      this.metronome.setBeatGrid({
+        bpm,
+        anchorPerformanceMs: reanchorLeaderMs,
+        beatIndexAtAnchor: 0
+      });
+
+      const announcement: StartAnnouncePayload = {
+        bpm,
+        version: this.roomState.getState().version,
+        anchorLeaderMs: reanchorLeaderMs,
+        beatIndexAtAnchor: 0
+      };
+
+      this.connectionManager.broadcastControl({
+        type: 'start_announce',
+        payload: announcement
+      });
+      return;
+    }
+
     this.metronome.setBPM(bpm);
 
-    // TODO: Broadcast param_update to peers
+    const update: ParamUpdatePayload = {
+      bpm,
+      version: state.version
+    };
+
+    this.connectionManager.broadcastControl({
+      type: 'param_update',
+      payload: update
+    });
   }
 
   /**

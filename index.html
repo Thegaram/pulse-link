@@ -8,7 +8,8 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main class="app">
+  <div class="shell">
+    <main class="app">
     <header class="tabs" role="tablist" aria-label="Mode">
       <button id="hostTabBtn" class="tab active" role="tab" aria-selected="true">Host</button>
       <button id="joinTabBtn" class="tab" role="tab" aria-selected="false">Join</button>
@@ -16,7 +17,12 @@
 
     <section id="hostView" class="view">
       <div id="hostShare" class="room-share" title="Copy code and show QR">
-        <button id="openQrBtn" class="qr-icon-btn" aria-label="Open room QR">
+        <button id="regenRoomBtn" class="qr-icon-btn qr-icon-left" aria-label="Reset room and generate new code">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L13 11h8V3l-3.3 3.3z"></path>
+          </svg>
+        </button>
+        <button id="openQrBtn" class="qr-icon-btn" aria-label="Show room QR code">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <rect x="3" y="3" width="6" height="6"></rect>
             <rect x="15" y="3" width="6" height="6"></rect>
@@ -75,7 +81,9 @@
         <p id="joinLiveStatus" class="status">Connected. Waiting for host to start.</p>
       </div>
     </section>
-  </main>
+    </main>
+    <div id="appVersion" class="app-version"></div>
+  </div>
 
   <div id="qrModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="qrTitle">
     <div class="modal-card">
@@ -95,6 +103,9 @@
 
     const MIN_BPM = 40;
     const MAX_BPM = 240;
+    const BPM_UPDATE_DEBOUNCE_MS = 100;
+    const APP_VERSION = '5250df1-local';
+    const HOST_ROOM_STORAGE_KEY = 'pulse_link_host_room_code';
     let leader = null;
     let peer = null;
     let currentRoomId = null;
@@ -112,6 +123,7 @@
     const joinView = document.getElementById('joinView');
 
     const hostShare = document.getElementById('hostShare');
+    const regenRoomBtn = document.getElementById('regenRoomBtn');
     const openQrBtn = document.getElementById('openQrBtn');
     const hostRoomCode = document.getElementById('hostRoomCode');
     const hostBeat = document.getElementById('hostBeat');
@@ -136,6 +148,11 @@
     const qrModal = document.getElementById('qrModal');
     const qrNode = document.getElementById('qrcode');
     const closeQrBtn = document.getElementById('closeQrBtn');
+    const appVersion = document.getElementById('appVersion');
+    let bpmHoldIntervalId = null;
+    let bpmHoldStartTimeoutId = null;
+    let suppressPointerClickUntil = 0;
+    let bpmUpdateDebounceTimeoutId = null;
 
     function refreshHostStatus() {
       if (Date.now() < hostStatusOverrideUntil) {
@@ -204,6 +221,27 @@
     function setHostRoomCode(code) {
       currentRoomId = code;
       hostRoomCode.textContent = code || '------';
+
+      if (code) {
+        localStorage.setItem(HOST_ROOM_STORAGE_KEY, code);
+      } else {
+        localStorage.removeItem(HOST_ROOM_STORAGE_KEY);
+      }
+    }
+
+    function loadStoredHostRoomCode() {
+      const stored = localStorage.getItem(HOST_ROOM_STORAGE_KEY);
+      if (!stored) {
+        return null;
+      }
+
+      const normalized = stored.toUpperCase().trim();
+      if (!/^[A-Z0-9]{6}$/.test(normalized)) {
+        localStorage.removeItem(HOST_ROOM_STORAGE_KEY);
+        return null;
+      }
+
+      return normalized;
     }
 
     function roomUrl(roomId) {
@@ -221,13 +259,14 @@
     }
 
     function updateHostControls() {
-      const running = leader ? leader.isRunning() : false;
       const hasLeader = Boolean(leader);
+      const state = leader?.getState();
+      const activePlayback = state === 'L_RUNNING';
 
-      bpmDownBtn.disabled = !hasLeader || running;
-      bpmUpBtn.disabled = !hasLeader || running;
-      startBtn.disabled = !hasLeader || running;
-      stopBtn.disabled = !hasLeader || !running;
+      bpmDownBtn.disabled = !hasLeader;
+      bpmUpBtn.disabled = !hasLeader;
+      startBtn.disabled = !hasLeader || activePlayback;
+      stopBtn.disabled = !hasLeader || !activePlayback;
     }
 
     function applyHostBpm(value) {
@@ -236,8 +275,74 @@
       hostBpmValue.textContent = String(currentBpm);
 
       if (leader) {
-        leader.setBPM(currentBpm);
+        const state = leader.getState();
+        const running = state === 'L_RUNNING';
+
+        if (running) {
+          if (bpmUpdateDebounceTimeoutId !== null) {
+            clearTimeout(bpmUpdateDebounceTimeoutId);
+          }
+          bpmUpdateDebounceTimeoutId = window.setTimeout(() => {
+            bpmUpdateDebounceTimeoutId = null;
+            if (leader) {
+              leader.setBPM(currentBpm);
+            }
+          }, BPM_UPDATE_DEBOUNCE_MS);
+        } else {
+          leader.setBPM(currentBpm);
+        }
       }
+    }
+
+    function stopBpmHold() {
+      if (bpmHoldStartTimeoutId !== null) {
+        clearTimeout(bpmHoldStartTimeoutId);
+        bpmHoldStartTimeoutId = null;
+      }
+      if (bpmHoldIntervalId !== null) {
+        clearInterval(bpmHoldIntervalId);
+        bpmHoldIntervalId = null;
+      }
+    }
+
+    function applyBpmDelta(delta) {
+      if (!leader) {
+        return;
+      }
+      applyHostBpm(currentBpm + delta);
+    }
+
+    function attachBpmHold(button, delta) {
+      button.addEventListener('pointerdown', (event) => {
+        if (!leader || event.button !== 0) {
+          return;
+        }
+        event.preventDefault();
+        suppressPointerClickUntil = Date.now() + 300;
+        applyBpmDelta(delta);
+
+        stopBpmHold();
+        bpmHoldStartTimeoutId = window.setTimeout(() => {
+          bpmHoldIntervalId = window.setInterval(() => {
+            applyBpmDelta(delta);
+          }, 70);
+        }, 300);
+      });
+
+      button.addEventListener('pointerup', stopBpmHold);
+      button.addEventListener('pointerleave', stopBpmHold);
+      button.addEventListener('pointercancel', stopBpmHold);
+
+      // Keyboard activation still dispatches click with detail=0.
+      button.addEventListener('click', (event) => {
+        if (!leader) {
+          return;
+        }
+        if (event.detail > 0 && Date.now() < suppressPointerClickUntil) {
+          return;
+        }
+        applyBpmDelta(delta);
+      });
     }
 
     function clearJoinTimer() {
@@ -274,7 +379,7 @@
       joinView.classList.toggle('hidden', isHost);
     }
 
-    async function ensureHostRoom() {
+    async function ensureHostRoom(forceNewCode = false) {
       if (leader) {
         updateHostControls();
         return;
@@ -285,15 +390,38 @@
         flashBeat(hostBeat, isDownbeat);
       });
 
-      const roomId = await leader.createRoom(currentBpm, ICE_CONFIG);
+      const preferredRoomId = forceNewCode ? undefined : loadStoredHostRoomCode();
+      const roomId = await leader.createRoom(currentBpm, ICE_CONFIG, preferredRoomId ?? undefined);
       setHostRoomCode(roomId);
       startHostStatusTimer();
       updateHostControls();
     }
 
+    async function regenerateHostRoom() {
+      if (activeTab !== 'host') {
+        return;
+      }
+
+      if (leader) {
+        await teardownHost();
+      }
+
+      // Reset BPM to default on full room reset.
+      applyHostBpm(120);
+
+      // Ensure new code instead of reusing localStorage value.
+      await ensureHostRoom(true);
+      showHostTemporaryStatus('New room code generated');
+    }
+
     async function teardownHost() {
       if (!leader) {
         return;
+      }
+
+      if (bpmUpdateDebounceTimeoutId !== null) {
+        clearTimeout(bpmUpdateDebounceTimeoutId);
+        bpmUpdateDebounceTimeoutId = null;
       }
 
       leader.stopMetronome();
@@ -351,6 +479,11 @@
             joinBpmValue.textContent = String(peer.getMetronome().getBPM());
           }
         }, 300);
+      });
+
+      peer.onSyncStatus((status) => {
+        showJoinLive();
+        setJoinLiveStatus(status);
       });
 
       await peer.joinRoom(roomId, ICE_CONFIG);
@@ -435,6 +568,14 @@
       openQrModal();
     });
 
+    regenRoomBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      regenerateHostRoom().catch((error) => {
+        console.error(error);
+        hostStatus.textContent = 'Connected peers: 0';
+      });
+    });
+
     closeQrBtn.addEventListener('click', () => {
       qrModal.classList.add('hidden');
     });
@@ -451,17 +592,20 @@
       }
     });
 
-    bpmDownBtn.addEventListener('click', () => {
-      applyHostBpm(currentBpm - 1);
-    });
+    document.addEventListener('pointerup', stopBpmHold);
 
-    bpmUpBtn.addEventListener('click', () => {
-      applyHostBpm(currentBpm + 1);
-    });
+    attachBpmHold(bpmDownBtn, -1);
+    attachBpmHold(bpmUpBtn, +1);
 
     startBtn.addEventListener('click', () => {
       if (!leader) {
         return;
+      }
+
+      if (bpmUpdateDebounceTimeoutId !== null) {
+        clearTimeout(bpmUpdateDebounceTimeoutId);
+        bpmUpdateDebounceTimeoutId = null;
+        leader.setBPM(currentBpm);
       }
 
       leader.startMetronome();
@@ -497,6 +641,7 @@
     });
 
     applyHostBpm(currentBpm);
+    appVersion.textContent = APP_VERSION;
     renderJoinCodeVisual();
 
     const sharedRoom = new URLSearchParams(window.location.search).get('room');

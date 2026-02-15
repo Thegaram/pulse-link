@@ -30,13 +30,28 @@ body {
   padding: 18px;
 }
 
-.app {
+.shell {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
   width: min(460px, 100%);
+}
+
+.app {
+  width: 100%;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 24px;
   box-shadow: 0 30px 80px rgba(15, 23, 42, 0.1);
   padding: 16px;
+}
+
+.app-version {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.4px;
+  user-select: text;
 }
 
 .tabs {
@@ -98,12 +113,21 @@ body {
   transform: translateY(-50%);
   width: 28px;
   height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: #ffffff;
   color: var(--muted);
-  font-size: 14px;
+  line-height: 1;
   cursor: pointer;
+}
+
+.qr-icon-left {
+  left: 8px;
+  right: auto;
 }
 
 .qr-icon-btn:hover {

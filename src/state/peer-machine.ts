@@ -8,8 +8,11 @@ import { MockSignaling } from '../signaling/mock.js';
 import { ClockSync } from '../sync/clock.js';
 import { Metronome } from '../audio/metronome.js';
 import { PeerState } from './types.js';
-import { StartAnnouncePayload, TimePingPayload, TimePongPayload } from '../types.js';
+import { StartAnnouncePayload, ParamUpdatePayload, TimePingPayload, TimePongPayload } from '../types.js';
 import { IceConfig } from '../webrtc/types.js';
+
+const MIN_OFFSET_SAMPLES_FOR_START = 2;
+const PEER_SYNC_DELAY_MS = 250;
 
 export class PeerStateMachine {
   private state: PeerState = 'C_IDLE';
@@ -19,6 +22,11 @@ export class PeerStateMachine {
   private myId: string;
   private roomId: string | null = null;
   private onStartCallback: (() => void) | null = null;
+  private onSyncStatusCallback: ((status: string) => void) | null = null;
+  private hasClockOffset: boolean = false;
+  private offsetUpdateCount: number = 0;
+  private pendingStartAnnouncement: StartAnnouncePayload | null = null;
+  private pendingStartTimeoutId: number | null = null;
 
   constructor(myId: string) {
     this.myId = myId;
@@ -66,6 +74,10 @@ export class PeerStateMachine {
         this.handleRoomClosed();
       } else if (data.type === 'clock_offset') {
         this.handleClockOffset(data.payload);
+      } else if (data.type === 'param_update') {
+        this.handleParamUpdate(data.payload);
+      } else if (data.type === 'stop_announce') {
+        this.handleStopAnnounce();
       }
     });
 
@@ -73,6 +85,7 @@ export class PeerStateMachine {
     this.connectionManager.onConnected(() => {
       this.state = 'C_SYNCING';
       console.log('✅ Connected to leader, syncing clock...');
+      this.emitSyncStatus('Connected. Waiting for host to start.');
     });
 
     // Join room
@@ -110,6 +123,19 @@ export class PeerStateMachine {
 
     // Apply leader-calculated offset directly.
     this.clockSync.setOffsetMs(payload.offsetMs);
+    this.offsetUpdateCount++;
+    this.hasClockOffset = this.offsetUpdateCount >= MIN_OFFSET_SAMPLES_FOR_START;
+
+    // Late join: only schedule start after we have a usable offset sample.
+    if (this.pendingStartAnnouncement) {
+      if (this.hasClockOffset) {
+        const pending = this.pendingStartAnnouncement;
+        this.pendingStartAnnouncement = null;
+        this.scheduleStartFromAnnouncement(pending);
+      } else {
+        this.emitSyncStatus('Synchronizing clocks...');
+      }
+    }
   }
 
   /**
@@ -117,6 +143,25 @@ export class PeerStateMachine {
    */
   private handleStartAnnounce(payload: StartAnnouncePayload): void {
     console.log('🎵 Received start announcement:', payload);
+
+    // Wait for at least one clock offset sample before scheduling start.
+    if (!this.hasClockOffset) {
+      this.pendingStartAnnouncement = payload;
+      this.emitSyncStatus('Synchronizing clocks...');
+      return;
+    }
+
+    this.scheduleStartFromAnnouncement(payload);
+  }
+
+  /**
+   * Schedule local playback from leader announcement.
+   */
+  private scheduleStartFromAnnouncement(payload: StartAnnouncePayload): void {
+    if (this.pendingStartTimeoutId !== null) {
+      clearTimeout(this.pendingStartTimeoutId);
+      this.pendingStartTimeoutId = null;
+    }
 
     const { bpm, anchorLeaderMs, beatIndexAtAnchor } = payload;
 
@@ -134,20 +179,52 @@ export class PeerStateMachine {
     // Calculate time until start
     const now = performance.now();
     const delayMs = Math.max(0, anchorPeerMs - now);
+    const startupDelayMs = Math.max(delayMs, PEER_SYNC_DELAY_MS);
 
-    console.log(`⏳ Starting in ${delayMs}ms (offset: ${offsetMs}ms)`);
-
-    // Notify UI that we're starting
-    if (this.onStartCallback) {
-      this.onStartCallback();
-    }
+    console.log(`⏳ Starting in ${startupDelayMs}ms (offset: ${offsetMs}ms)`);
+    this.emitSyncStatus('Synchronizing clocks...');
 
     // Start metronome at anchor time
-    setTimeout(() => {
+    this.pendingStartTimeoutId = window.setTimeout(() => {
+      this.pendingStartTimeoutId = null;
       this.metronome.start(bpm);
       this.state = 'C_RUNNING';
+
+      // Notify UI when playback actually begins.
+      if (this.onStartCallback) {
+        this.onStartCallback();
+      }
+
       console.log('✅ Metronome started in sync!');
-    }, delayMs);
+    }, startupDelayMs);
+  }
+
+  /**
+   * Handle parameter updates from leader (currently BPM).
+   */
+  private handleParamUpdate(payload: ParamUpdatePayload): void {
+    if (payload.bpm === undefined) {
+      return;
+    }
+
+    // Apply immediately if we're already running; otherwise cache for next start.
+    if (this.state === 'C_RUNNING') {
+      this.metronome.setBPM(payload.bpm);
+    }
+  }
+
+  /**
+   * Handle stop notification from leader.
+   */
+  private handleStopAnnounce(): void {
+    if (this.pendingStartTimeoutId !== null) {
+      clearTimeout(this.pendingStartTimeoutId);
+      this.pendingStartTimeoutId = null;
+    }
+    this.pendingStartAnnouncement = null;
+    this.metronome.stop();
+    this.state = 'C_SYNCING';
+    this.emitSyncStatus('Connected. Waiting for host to start.');
   }
 
   /**
@@ -162,6 +239,12 @@ export class PeerStateMachine {
    * Leave room
    */
   async leaveRoom(): Promise<void> {
+    if (this.pendingStartTimeoutId !== null) {
+      clearTimeout(this.pendingStartTimeoutId);
+      this.pendingStartTimeoutId = null;
+    }
+    this.pendingStartAnnouncement = null;
+
     this.metronome.stop();
 
     if (this.connectionManager) {
@@ -172,6 +255,8 @@ export class PeerStateMachine {
     this.roomId = null;
     this.state = 'C_IDLE';
     this.clockSync.reset();
+    this.hasClockOffset = false;
+    this.offsetUpdateCount = 0;
 
     console.log('✅ Left room');
   }
@@ -212,9 +297,22 @@ export class PeerStateMachine {
   }
 
   /**
+   * Register callback for peer sync status text.
+   */
+  onSyncStatus(callback: (status: string) => void): void {
+    this.onSyncStatusCallback = callback;
+  }
+
+  /**
    * Register callback for when metronome starts
    */
   onStart(callback: () => void): void {
     this.onStartCallback = callback;
+  }
+
+  private emitSyncStatus(status: string): void {
+    if (this.onSyncStatusCallback) {
+      this.onSyncStatusCallback(status);
+    }
   }
 }

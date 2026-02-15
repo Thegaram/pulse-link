@@ -43,6 +43,14 @@ export class Metronome {
    * This is the key method for synchronized playback across devices
    */
   setBeatGrid(grid: BeatGrid): void {
+    const wasRunning = this.isRunning;
+
+    // Re-anchoring during playback must drop old lookahead clicks,
+    // otherwise old/new schedules overlap and sound chaotic.
+    if (wasRunning) {
+      this.clearScheduledSounds();
+    }
+
     this.beatGrid = grid;
     this.bpm = grid.bpm;
 
@@ -54,7 +62,11 @@ export class Metronome {
 
     // Start from next beat after current time
     this.nextBeatIndex = grid.beatIndexAtAnchor + Math.ceil(elapsedBeats);
-    this.nextScheduleTimeMs = now;
+    this.nextScheduleTimeMs = this.calculateBeatTime(this.nextBeatIndex);
+
+    if (wasRunning) {
+      this.scheduleAhead();
+    }
   }
 
   /**
