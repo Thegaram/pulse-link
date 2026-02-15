@@ -33,7 +33,11 @@ function parseEnv(contents) {
 }
 
 function pick(env, key, fallback = '') {
-  return env[key] ?? process.env[key] ?? fallback;
+  const value = env[key] ?? process.env[key];
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  return value;
 }
 
 function detectGitShortSha() {

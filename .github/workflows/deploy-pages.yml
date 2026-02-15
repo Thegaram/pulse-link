@@ -43,8 +43,8 @@ jobs:
 
       - name: Build site
         env:
-          SIGNALING_BACKEND: ${{ secrets.SIGNALING_BACKEND }}
-          TRANSPORT_MODE: ${{ secrets.TRANSPORT_MODE }}
+          SIGNALING_BACKEND: ably
+          TRANSPORT_MODE: pubsub
           ABLY_KEY: ${{ secrets.ABLY_KEY }}
           ABLY_TOKEN: ${{ secrets.ABLY_TOKEN }}
           ABLY_CLIENT_ID: ${{ secrets.ABLY_CLIENT_ID }}
