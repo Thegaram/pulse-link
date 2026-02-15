@@ -23,8 +23,3 @@ export function setLeader(leader: LeaderStateMachine | null): void {
 export function setPeer(peer: PeerStateMachine | null): void {
   update((state) => ({ ...state, peer }));
 }
-
-export function clearSessionState(): void {
-  update(() => ({ ...initialSessionState }));
-}
-

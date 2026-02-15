@@ -64,13 +64,6 @@ export class RoomStateManager {
   }
 
   /**
-   * Set start time
-   */
-  setStartTime(timeMs: number): void {
-    this.state.startAtLeaderMs = timeMs;
-  }
-
-  /**
    * Set beat anchor (timestamp + absolute beat index)
    */
   setBeatAnchor(timeMs: number, beatIndexAtAnchor: number): void {

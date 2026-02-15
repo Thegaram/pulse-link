@@ -130,7 +130,7 @@ export interface RoomState {
   leaderId: string;
   bpm: number;
   version: number;
-  status: "open" | "countdown" | "running" | "closed";
+  status: "open" | "running" | "closed";
   startAtLeaderMs?: number;
   beatIndexAtAnchor?: number;
   peers: Record<string, PeerConnState>;

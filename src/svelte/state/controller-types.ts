@@ -8,7 +8,6 @@ export type BackendState = 'idle' | 'connecting' | 'ok' | 'error';
 export interface ControllerCallbacks {
   getActiveTab(): Mode;
   getCurrentBpm(): number;
-  getJoinCode(): string;
 
   getLeader(): LeaderStateMachine | null;
   setLeader(leader: LeaderStateMachine | null): void;

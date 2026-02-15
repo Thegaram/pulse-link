@@ -1,5 +1,4 @@
-import { derived, writable } from 'svelte/store';
-import { formatJoinCodeVisual } from './runtime-ops.js';
+import { writable } from 'svelte/store';
 
 export interface JoinState {
   status: string;
@@ -28,7 +27,6 @@ const initialJoinState: JoinState = {
 const { subscribe, update } = writable<JoinState>(initialJoinState);
 
 export const joinState = { subscribe };
-export const joinCodeVisual = derived(joinState, ($join) => formatJoinCodeVisual($join.code));
 
 export function setJoinCode(code: string): void {
   update((state) => ({ ...state, code }));
@@ -71,17 +69,3 @@ export function setJoinBpm(bpm: number): void {
 export function setJoinClearCodeOnNextEntry(clearCodeOnNextEntry: boolean): void {
   update((state) => ({ ...state, clearCodeOnNextEntry }));
 }
-
-export function resetJoinState(): void {
-  update((state) => ({
-    ...state,
-    status: 'Enter a room code to join.',
-    showEntry: true,
-    showLive: false,
-    bpm: 120,
-    inputDisabled: false,
-    inProgress: false,
-    clearCodeOnNextEntry: false
-  }));
-}
-

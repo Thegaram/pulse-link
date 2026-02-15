@@ -188,7 +188,11 @@ export class PeerStateMachine {
         this.pendingStartAnnouncement = null;
         this.scheduleStartFromAnnouncement(pending);
       } else {
-        this.emitSyncStatus('Synchronizing clocks...');
+        if (this.state !== 'C_RUNNING' && !this.metronome.running()) {
+          this.emitSyncStatus('Synchronizing clocks...');
+        } else {
+          this.emitSyncStatus('Running.');
+        }
       }
     }
   }
@@ -208,7 +212,11 @@ export class PeerStateMachine {
     // Wait for at least one clock offset sample before scheduling start.
     if (!this.hasClockOffset) {
       this.pendingStartAnnouncement = payload;
-      this.emitSyncStatus('Synchronizing clocks...');
+      if (this.state !== 'C_RUNNING' && !this.metronome.running()) {
+        this.emitSyncStatus('Synchronizing clocks...');
+      } else {
+        this.emitSyncStatus('Running.');
+      }
       return;
     }
 

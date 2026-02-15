@@ -280,8 +280,8 @@ export class LeaderStateMachine {
     };
     this.sendControlToPeer(peerId, 'param_update', paramUpdate);
 
-    // If playback already scheduled/running, send current anchor so peer can join in-phase.
-    if ((state.status === 'countdown' || state.status === 'running') && state.startAtLeaderMs !== undefined) {
+    // If playback is already running, send current anchor so peer can join in-phase.
+    if (state.status === 'running' && state.startAtLeaderMs !== undefined) {
       const announcement: StartAnnouncePayload = {
         bpm: state.bpm,
         version: state.version,
@@ -295,7 +295,7 @@ export class LeaderStateMachine {
   }
 
   /**
-   * Start metronome with countdown
+   * Start metronome
    */
   startMetronome(): void {
     if (this.state !== 'L_ROOM_OPEN') {
@@ -502,13 +502,6 @@ export class LeaderStateMachine {
    */
   getRoomId(): string | null {
     return this.roomState?.getState().roomId ?? null;
-  }
-
-  /**
-   * Get BPM
-   */
-  getBPM(): number {
-    return this.roomState?.getState().bpm ?? 120;
   }
 
   /**

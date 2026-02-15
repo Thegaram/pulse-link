@@ -100,20 +100,4 @@ export class JoinController {
     this.cb.setJoinInProgress(false);
   }
 
-  maybeAutoJoin(): void {
-    const code = this.cb.getJoinCode();
-    if (code.length !== 6 || this.cb.getPeer()) {
-      return;
-    }
-
-    this.joinRoom(code).catch((error) => {
-      console.error(error);
-      this.cb.setJoinInProgress(false);
-      this.cb.setJoinInputDisabled(false);
-      this.cb.setJoinStatus('Join failed. Try another code.');
-      this.cb.enableJoinCodeReplaceOnNextEntry();
-      this.cb.showJoinEntry();
-      this.cb.setBackendStatus('error', this.cb.errorText(error));
-    });
-  }
 }

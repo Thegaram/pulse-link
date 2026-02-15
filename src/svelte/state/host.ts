@@ -62,18 +62,3 @@ export function showHostTemporaryStatus(text: string, durationMs = 1200): void {
     statusOverrideTimerId = null;
   }, durationMs);
 }
-
-export function resetHostState(): void {
-  if (statusOverrideTimerId !== null) {
-    clearTimeout(statusOverrideTimerId);
-    statusOverrideTimerId = null;
-  }
-  update((state) => ({
-    ...state,
-    currentRoomId: null,
-    isRunning: false,
-    hasPendingResume: false,
-    peerCount: 0,
-    statusOverrideText: ''
-  }));
-}

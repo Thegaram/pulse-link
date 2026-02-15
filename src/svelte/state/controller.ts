@@ -65,10 +65,6 @@ export class AppWorkflowController {
     await this.joinController.joinRoom(roomId);
   }
 
-  maybeAutoJoin(): void {
-    this.joinController.maybeAutoJoin();
-  }
-
   startHostMetronome(): void {
     this.hostController.startHostMetronome();
   }

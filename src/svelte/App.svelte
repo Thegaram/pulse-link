@@ -12,7 +12,7 @@
   import type { TransportRuntime } from '../realtime/runtime.js';
   import type { LoadedConfig } from './config-loader.js';
   import type { Mode } from './state/constants.js';
-  import { AppWorkflowController, type BackendState } from './state/controller.js';
+  import { AppWorkflowController } from './state/controller.js';
   import { ViewController } from './state/view-controller.js';
   import {
     hostRoomCodeDisplay,
@@ -38,8 +38,8 @@
     setJoinStatus
   } from './state/join.js';
   import { sessionState, setLeader, setPeer } from './state/session.js';
-  import { backendText, setActiveTab, setBackendLabel, setBackendStatus, setQrOpen, uiState } from './state/ui.js';
-  import { backendLabel, clampBpm, sanitizeCode, shouldAutoJoin } from './state/runtime-ops.js';
+  import { backendText, setActiveTab, setBackendLabel, setBackendStatus as setUiBackendStatus, setQrOpen, uiState } from './state/ui.js';
+  import { backendLabel, clampBpm, sanitizeCode } from './state/runtime-ops.js';
   import {
     copyTextToClipboard,
     loadPersistedHostSession,
@@ -84,8 +84,16 @@
     return 'Connection error';
   }
 
-  function setBackendStatusWithDetail(state: BackendState, detail = ''): void {
-    setBackendStatus(state, detail);
+  function reportHostInitError(error: unknown): void {
+    console.error(error);
+    setHostPeerCount(0);
+    setUiBackendStatus('error', errorText(error));
+  }
+
+  function ensureHostRoomWithErrorHandling(): void {
+    workflow?.ensureHostRoom().catch((error) => {
+      reportHostInitError(error);
+    });
   }
 
   function setJoinCodeValue(code: string): void {
@@ -156,7 +164,6 @@
     workflow = new AppWorkflowController(transportRuntime, {
       getActiveTab: () => get(uiState).activeTab,
       getCurrentBpm: () => get(hostState).currentBpm,
-      getJoinCode: () => get(joinState).code,
       getLeader: () => get(sessionState).leader,
       setLeader,
       getPeer: () => get(sessionState).peer,
@@ -169,7 +176,7 @@
       setJoinBpm,
       setJoinInProgress,
       setJoinInputDisabled,
-      setBackendStatus: setBackendStatusWithDetail,
+      setBackendStatus: setUiBackendStatus,
       loadStoredHostRoomCode,
       loadPersistedHostSession,
       persistHostSession,
@@ -201,14 +208,12 @@
       switchToHost,
       switchToJoin,
       onHostError: (error) => {
-        console.error(error);
-        setHostPeerCount(0);
-        setBackendStatusWithDetail('error', errorText(error));
+        reportHostInitError(error);
       },
       onJoinError: (error) => {
         console.error(error);
         setJoinStatus('Failed to open join mode.');
-        setBackendStatusWithDetail('error', errorText(error));
+        setUiBackendStatus('error', errorText(error));
       }
     });
   }
@@ -232,7 +237,7 @@
     const state = get(joinState);
     const session = get(sessionState);
     const ui = get(uiState);
-    if (!shouldAutoJoin(ui.activeTab, state.inProgress, Boolean(session.peer), state.code)) {
+    if (ui.activeTab !== 'join' || state.inProgress || Boolean(session.peer) || state.code.length !== 6) {
       return;
     }
 
@@ -243,7 +248,7 @@
       setJoinStatus('Join failed. Try another code.');
       enableJoinCodeReplaceOnNextEntry();
       showJoinEntry();
-      setBackendStatusWithDetail('error', errorText(error));
+      setUiBackendStatus('error', errorText(error));
     });
   }
 
@@ -299,7 +304,7 @@
     workflow?.teardownPeer().catch((error) => {
       console.error(error);
       setJoinStatus('Failed to leave room.');
-      setBackendStatusWithDetail('error', errorText(error));
+      setUiBackendStatus('error', errorText(error));
     });
   }
 
@@ -339,7 +344,7 @@
     initializeAppController();
 
     setBackendLabel(backendLabel(config.signaling.backend));
-    setBackendStatusWithDetail('idle');
+    setUiBackendStatus('idle');
 
     const onPageHide = () => {
       isPageUnloading = true;
@@ -362,11 +367,7 @@
 
     if (shouldRestoreHost) {
       activateTab('host');
-      workflow?.ensureHostRoom().catch((error) => {
-        console.error(error);
-        setHostPeerCount(0);
-        setBackendStatusWithDetail('error', errorText(error));
-      });
+      ensureHostRoomWithErrorHandling();
     } else if (sharedRoom) {
       activateTab('join');
       setJoinCode(sharedRoom);
@@ -375,11 +376,7 @@
       maybeAutoJoin();
     } else {
       activateTab('host');
-      workflow?.ensureHostRoom().catch((error) => {
-        console.error(error);
-        setHostPeerCount(0);
-        setBackendStatusWithDetail('error', errorText(error));
-      });
+      ensureHostRoomWithErrorHandling();
     }
 
     return () => {

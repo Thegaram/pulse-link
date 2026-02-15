@@ -18,18 +18,6 @@ export type PeerState =
   | 'C_IDLE'
   | 'C_DISCOVERING'
   | 'C_SIGNALING'
-  | 'C_CONNECTING'
   | 'C_SYNCING'
   | 'C_RUNNING'
-  | 'C_RECONNECTING'
   | 'C_FAILED';
-
-/**
- * Shared state data
- */
-export interface StateContext {
-  roomId: string | null;
-  myId: string;
-  bpm: number;
-  version: number;
-}
