@@ -13,9 +13,24 @@
   import { createTransportRuntime } from '../realtime/runtime.js';
   import type { TransportRuntime } from '../realtime/runtime.js';
   import { flashBeat } from '../ui/dom.js';
-  import { BPM_UPDATE_DEBOUNCE_MS, HOST_ROOM_STORAGE_KEY, MAX_BPM, MIN_BPM } from '../ui/app-shell-constants.js';
+  import { BPM_UPDATE_DEBOUNCE_MS } from '../ui/app-shell-constants.js';
   import type { Mode } from '../ui/app-shell-constants.js';
   import type { LoadedConfig } from './config-loader.js';
+  import { createHostViewState } from './state/host.js';
+  import { createJoinViewState } from './state/join.js';
+  import { createUiState, type BackendState } from './state/ui.js';
+  import {
+    backendLabel,
+    clampBpm,
+    formatBackendText,
+    formatJoinCodeVisual,
+    getHostRoomCodeDisplay,
+    loadStoredHostRoomCode,
+    persistHostRoomCode,
+    roomUrl,
+    sanitizeCode,
+    shouldAutoJoin
+  } from './state/runtime-ops.js';
 
   declare const QRCode: {
     new (element: HTMLElement, options: {
@@ -36,27 +51,9 @@
   let leader: LeaderStateMachine | null = null;
   let peer: PeerStateMachine | null = null;
 
-  let currentRoomId: string | null = null;
-  let currentBpm = 120;
-  let isHostRunning = false;
-  let activeTab: Mode = 'host';
-
-  let hostStatus = 'Connected peers: 0';
-  let joinStatus = 'Enter a room code to join.';
-  let joinLiveStatus = 'Connected. Waiting for host to start.';
-
-  let showJoinEntryState = true;
-  let showJoinLiveState = false;
-
-  let joinCode = '';
-  let joinBpm = 120;
-  let joinInputDisabled = false;
-
-  let backendState: 'idle' | 'connecting' | 'ok' | 'error' = 'idle';
-  let backendText = 'Ably';
-  let backendTitle = '';
-
-  let qrOpen = false;
+  let host = createHostViewState();
+  let join = createJoinViewState();
+  let ui = createUiState('Ably');
 
   let hostBeatEl: HTMLDivElement | null = null;
   let joinBeatEl: HTMLDivElement | null = null;
@@ -70,29 +67,15 @@
   let bpmHoldStartTimeoutId: number | null = null;
   let bpmUpdateDebounceTimeoutId: number | null = null;
 
-  let hostStatusOverrideUntil = 0;
-  let hostStatusOverrideText = '';
   let suppressPointerClickUntil = 0;
-  let joinInProgress = false;
-  let clearJoinCodeOnNextEntry = false;
 
   $: hasLeader = Boolean(leader);
-  $: activePlayback = isHostRunning;
+  $: activePlayback = host.isRunning;
   $: bpmDisabled = !hasLeader;
   $: startDisabled = !hasLeader || activePlayback;
   $: stopDisabled = !hasLeader || !activePlayback;
-  $: hostRoomCodeDisplay = currentRoomId ?? '------';
-  $: joinCodeVisual = Array.from({ length: 6 }, (_, i) => joinCode.split('')[i] ?? '_').join(' ');
-
-  function backendLabel(): string {
-    if (config.signaling.backend === 'mock') {
-      return 'Local';
-    }
-    if (config.signaling.backend === 'supabase') {
-      return 'Supabase';
-    }
-    return 'Ably';
-  }
+  $: hostRoomCodeDisplay = getHostRoomCodeDisplay(host.currentRoomId);
+  $: joinCodeVisual = formatJoinCodeVisual(join.code);
 
   function errorText(error: unknown): string {
     if (error instanceof Error && error.message) {
@@ -101,30 +84,18 @@
     return 'Connection error';
   }
 
-  function setBackendStatus(state: 'idle' | 'connecting' | 'ok' | 'error', detail = ''): void {
-    backendState = state;
-    backendTitle = detail;
-
-    let suffix = '';
-    if (state === 'connecting') {
-      suffix = ' connecting';
-    } else if (state === 'error') {
-      suffix = ' error';
-    }
-
-    backendText = `${backendLabel()}${suffix}`;
-  }
-
-  function sanitizeCode(value: string): string {
-    return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  function setBackendStatus(state: BackendState, detail = ''): void {
+    ui.backendState = state;
+    ui.backendTitle = detail;
+    ui.backendText = formatBackendText(backendLabel(config.signaling.backend), state);
   }
 
   function setJoinCode(code: string): void {
-    joinCode = sanitizeCode(code);
+    join.code = sanitizeCode(code);
   }
 
   function setJoinInputDisabled(disabled: boolean): void {
-    joinInputDisabled = disabled;
+    join.inputDisabled = disabled;
   }
 
   function clearJoinTimer(): void {
@@ -149,13 +120,13 @@
   }
 
   function refreshHostStatus(): void {
-    if (Date.now() < hostStatusOverrideUntil) {
-      hostStatus = hostStatusOverrideText;
+    if (Date.now() < host.statusOverrideUntil) {
+      host.status = host.statusOverrideText;
       return;
     }
 
     const peers = leader ? leader.getPeerCount() : 0;
-    hostStatus = `Connected peers: ${peers}`;
+    host.status = `Connected peers: ${peers}`;
   }
 
   function startHostStatusTimer(): void {
@@ -167,47 +138,18 @@
   }
 
   function showHostTemporaryStatus(text: string, durationMs = 1200): void {
-    hostStatusOverrideText = text;
-    hostStatusOverrideUntil = Date.now() + durationMs;
+    host.statusOverrideText = text;
+    host.statusOverrideUntil = Date.now() + durationMs;
     refreshHostStatus();
   }
 
   function setHostRoomCode(code: string | null): void {
-    currentRoomId = code;
-
-    if (code) {
-      localStorage.setItem(HOST_ROOM_STORAGE_KEY, code);
-    } else {
-      localStorage.removeItem(HOST_ROOM_STORAGE_KEY);
-    }
-  }
-
-  function loadStoredHostRoomCode(): string | null {
-    const stored = localStorage.getItem(HOST_ROOM_STORAGE_KEY);
-    if (!stored) {
-      return null;
-    }
-
-    const normalized = stored.toUpperCase().trim();
-    if (!/^[A-Z0-9]{6}$/.test(normalized)) {
-      localStorage.removeItem(HOST_ROOM_STORAGE_KEY);
-      return null;
-    }
-
-    return normalized;
-  }
-
-  function roomUrl(roomId: string): string {
-    const base = `${window.location.origin}${window.location.pathname}`;
-    return `${base}?room=${roomId}`;
-  }
-
-  function clampBpm(value: number): number {
-    return Math.max(MIN_BPM, Math.min(MAX_BPM, value));
+    host.currentRoomId = code;
+    persistHostRoomCode(code);
   }
 
   function applyHostBpm(value: number): void {
-    currentBpm = clampBpm(value);
+    host.currentBpm = clampBpm(value);
 
     if (!leader) {
       return;
@@ -215,7 +157,7 @@
 
     const running = leader.getState() === 'L_RUNNING';
     if (!running) {
-      leader.setBPM(currentBpm);
+      leader.setBPM(host.currentBpm);
       return;
     }
 
@@ -226,7 +168,7 @@
     bpmUpdateDebounceTimeoutId = window.setTimeout(() => {
       bpmUpdateDebounceTimeoutId = null;
       if (leader) {
-        leader.setBPM(currentBpm);
+        leader.setBPM(host.currentBpm);
       }
     }, BPM_UPDATE_DEBOUNCE_MS);
   }
@@ -247,7 +189,7 @@
     if (!leader) {
       return;
     }
-    applyHostBpm(currentBpm + delta);
+    applyHostBpm(host.currentBpm + delta);
   }
 
   function onBpmPointerDown(delta: number, event: PointerEvent): void {
@@ -280,11 +222,11 @@
   }
 
   function showJoinEntry(): void {
-    showJoinEntryState = true;
-    showJoinLiveState = false;
+    join.showEntry = true;
+    join.showLive = false;
     clearJoinTimer();
     clearJoinHostTimeout();
-    joinInProgress = false;
+    join.inProgress = false;
     setJoinInputDisabled(false);
     void tick().then(() => {
       joinInputEl?.focus();
@@ -292,16 +234,16 @@
   }
 
   function enableJoinCodeReplaceOnNextEntry(): void {
-    clearJoinCodeOnNextEntry = true;
+    join.clearCodeOnNextEntry = true;
   }
 
   function showJoinLive(): void {
-    showJoinEntryState = false;
-    showJoinLiveState = true;
+    join.showEntry = false;
+    join.showLive = true;
   }
 
   function activateTab(tab: Mode): void {
-    activeTab = tab;
+    ui.activeTab = tab;
   }
 
   async function ensureHostRoom(forceNewCode = false): Promise<void> {
@@ -319,9 +261,9 @@
     });
 
     const preferredRoomId = forceNewCode ? undefined : loadStoredHostRoomCode();
-    const roomId = await leader.createRoom(currentBpm, preferredRoomId ?? undefined);
+    const roomId = await leader.createRoom(host.currentBpm, preferredRoomId ?? undefined);
     setHostRoomCode(roomId);
-    isHostRunning = false;
+    host.isRunning = false;
     setBackendStatus('ok');
     startHostStatusTimer();
   }
@@ -329,7 +271,7 @@
   async function regenerateHostRoom(event: MouseEvent): Promise<void> {
     event.stopPropagation();
 
-    if (activeTab !== 'host') {
+    if (ui.activeTab !== 'host') {
       return;
     }
 
@@ -355,7 +297,7 @@
     leader.stopMetronome();
     await leader.closeRoom();
     leader = null;
-    isHostRunning = false;
+    host.isRunning = false;
     setHostRoomCode(null);
     stopHostStatusTimer();
     refreshHostStatus();
@@ -371,7 +313,7 @@
     peer = null;
     clearJoinTimer();
     showJoinEntry();
-    joinStatus = 'Enter a room code to join.';
+    join.status = 'Enter a room code to join.';
     setBackendStatus('idle');
   }
 
@@ -384,17 +326,17 @@
   async function switchToJoin(): Promise<void> {
     await teardownHost();
     activateTab('join');
-    joinStatus = 'Enter a room code to join.';
+    join.status = 'Enter a room code to join.';
     enableJoinCodeReplaceOnNextEntry();
     showJoinEntry();
   }
 
   async function joinRoom(roomId: string): Promise<void> {
     await teardownPeer();
-    joinStatus = 'Joining room...';
+    join.status = 'Joining room...';
     setBackendStatus('connecting');
     clearJoinHostTimeout();
-    joinInProgress = true;
+    join.inProgress = true;
     setJoinInputDisabled(true);
 
     peer = new PeerStateMachine(generatePeerId(), transportRuntime);
@@ -407,13 +349,13 @@
     peer.onStart(() => {
       clearJoinHostTimeout();
       showJoinLive();
-      joinLiveStatus = 'Running.';
+      join.liveStatus = 'Running.';
 
-      joinBpm = peer?.getMetronome().getBPM() ?? currentBpm;
+      join.bpm = peer?.getMetronome().getBPM() ?? host.currentBpm;
       clearJoinTimer();
       joinBpmTimer = window.setInterval(() => {
         if (peer) {
-          joinBpm = peer.getMetronome().getBPM();
+          join.bpm = peer.getMetronome().getBPM();
         }
       }, 300);
     });
@@ -422,11 +364,11 @@
       clearJoinHostTimeout();
       setBackendStatus('ok');
       showJoinLive();
-      joinLiveStatus = status;
+      join.liveStatus = status;
     });
 
     await peer.joinRoom(roomId);
-    joinStatus = 'Waiting for host...';
+    join.status = 'Waiting for host...';
     joinHostTimeoutId = window.setTimeout(() => {
       if (!peer) {
         return;
@@ -436,36 +378,32 @@
       if (state === 'C_DISCOVERING' || state === 'C_SIGNALING') {
         teardownPeer()
           .then(() => {
-            joinStatus = 'Host not found. Try another code.';
+            join.status = 'Host not found. Try another code.';
             enableJoinCodeReplaceOnNextEntry();
             setBackendStatus('error', 'No host responded for this room code');
           })
           .catch((error) => {
             console.error(error);
-            joinStatus = 'Host not found. Try another code.';
+            join.status = 'Host not found. Try another code.';
             enableJoinCodeReplaceOnNextEntry();
             setBackendStatus('error', errorText(error));
           });
       }
     }, JOIN_HOST_TIMEOUT_MS);
 
-    joinInProgress = false;
+    join.inProgress = false;
   }
 
   function maybeAutoJoin(): void {
-    if (activeTab !== 'join' || joinInProgress || peer) {
+    if (!shouldAutoJoin(ui.activeTab, join.inProgress, Boolean(peer), join.code)) {
       return;
     }
 
-    if (joinCode.length !== 6) {
-      return;
-    }
-
-    joinRoom(joinCode).catch((error) => {
+    joinRoom(join.code).catch((error) => {
       console.error(error);
-      joinInProgress = false;
+      join.inProgress = false;
       setJoinInputDisabled(false);
-      joinStatus = 'Join failed. Try another code.';
+      join.status = 'Join failed. Try another code.';
       enableJoinCodeReplaceOnNextEntry();
       showJoinEntry();
       setBackendStatus('error', errorText(error));
@@ -473,12 +411,12 @@
   }
 
   async function copyCodeOnly(): Promise<void> {
-    if (!currentRoomId) {
+    if (!host.currentRoomId) {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(currentRoomId);
+      await navigator.clipboard.writeText(host.currentRoomId);
       showHostTemporaryStatus('Code copied');
     } catch {
       // no-op
@@ -486,17 +424,17 @@
   }
 
   function closeQrModal(): void {
-    qrOpen = false;
+    ui.qrOpen = false;
   }
 
   async function openQrModal(event: MouseEvent): Promise<void> {
     event.stopPropagation();
 
-    if (!currentRoomId) {
+    if (!host.currentRoomId) {
       return;
     }
 
-    qrOpen = true;
+    ui.qrOpen = true;
     await tick();
 
     if (!qrNodeEl) {
@@ -505,7 +443,7 @@
 
     qrNodeEl.innerHTML = '';
     new QRCode(qrNodeEl, {
-      text: roomUrl(currentRoomId),
+      text: roomUrl(host.currentRoomId),
       width: 220,
       height: 220,
       colorDark: '#111111',
@@ -521,11 +459,11 @@
     if (bpmUpdateDebounceTimeoutId !== null) {
       clearTimeout(bpmUpdateDebounceTimeoutId);
       bpmUpdateDebounceTimeoutId = null;
-      leader.setBPM(currentBpm);
+      leader.setBPM(host.currentBpm);
     }
 
     leader.startMetronome();
-    isHostRunning = true;
+    host.isRunning = true;
   }
 
   function stopHostMetronome(): void {
@@ -534,11 +472,11 @@
     }
 
     leader.stopMetronome();
-    isHostRunning = false;
+    host.isRunning = false;
   }
 
   function onJoinCodeLineClick(): void {
-    if (!joinInputDisabled) {
+    if (!join.inputDisabled) {
       joinInputEl?.focus();
     }
   }
@@ -555,7 +493,7 @@
       return;
     }
 
-    if (!clearJoinCodeOnNextEntry) {
+    if (!join.clearCodeOnNextEntry) {
       return;
     }
 
@@ -566,13 +504,13 @@
     const printable = event.key.length === 1;
     if (printable) {
       setJoinCode('');
-      clearJoinCodeOnNextEntry = false;
+      join.clearCodeOnNextEntry = false;
       return;
     }
 
     if (event.key === 'Backspace' || event.key === 'Delete') {
       setJoinCode('');
-      clearJoinCodeOnNextEntry = false;
+      join.clearCodeOnNextEntry = false;
       event.preventDefault();
     }
   }
@@ -580,38 +518,38 @@
   function onJoinCodePaste(event: ClipboardEvent): void {
     event.preventDefault();
     const pasted = (event.clipboardData?.getData('text') ?? '').toUpperCase();
-    clearJoinCodeOnNextEntry = false;
+    join.clearCodeOnNextEntry = false;
     setJoinCode(pasted);
     maybeAutoJoin();
   }
 
   function onDocumentKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape' && qrOpen) {
+    if (event.key === 'Escape' && ui.qrOpen) {
       closeQrModal();
     }
   }
 
   function onHostTabClick(): void {
-    if (activeTab === 'host') {
+    if (ui.activeTab === 'host') {
       return;
     }
 
     switchToHost().catch((error) => {
       console.error(error);
       stopHostStatusTimer();
-      hostStatus = 'Connected peers: 0';
+      host.status = 'Connected peers: 0';
       setBackendStatus('error', errorText(error));
     });
   }
 
   function onJoinTabClick(): void {
-    if (activeTab === 'join') {
+    if (ui.activeTab === 'join') {
       return;
     }
 
     switchToJoin().catch((error) => {
       console.error(error);
-      joinStatus = 'Failed to open join mode.';
+      join.status = 'Failed to open join mode.';
       setBackendStatus('error', errorText(error));
     });
   }
@@ -633,13 +571,13 @@
       activateTab('join');
       setJoinCode(sharedRoom.trim().toUpperCase());
       showJoinEntry();
-      joinStatus = 'Joining room...';
+      join.status = 'Joining room...';
       maybeAutoJoin();
     } else {
       activateTab('host');
       ensureHostRoom().catch((error) => {
         console.error(error);
-        hostStatus = 'Connected peers: 0';
+        host.status = 'Connected peers: 0';
         setBackendStatus('error', errorText(error));
       });
     }
@@ -668,13 +606,13 @@
 
 <div class="shell">
   <main class="app">
-    <Tabs activeTab={activeTab} onHost={onHostTabClick} onJoin={onJoinTabClick} />
+    <Tabs activeTab={ui.activeTab} onHost={onHostTabClick} onJoin={onJoinTabClick} />
     <div class="panel-frame">
       <HostPanel
-        hidden={activeTab !== 'host'}
+        hidden={ui.activeTab !== 'host'}
         roomCode={hostRoomCodeDisplay}
-        bpm={currentBpm}
-        status={hostStatus}
+        bpm={host.currentBpm}
+        status={host.status}
         bpmDisabled={bpmDisabled}
         startDisabled={startDisabled}
         stopDisabled={stopDisabled}
@@ -697,15 +635,15 @@
         onStop={stopHostMetronome}
       />
       <JoinPanel
-        hidden={activeTab !== 'join'}
-        showEntry={showJoinEntryState}
-        showLive={showJoinLiveState}
-        joinCode={joinCode}
+        hidden={ui.activeTab !== 'join'}
+        showEntry={join.showEntry}
+        showLive={join.showLive}
+        joinCode={join.code}
         joinCodeVisual={joinCodeVisual}
-        joinStatus={joinStatus}
-        joinLiveStatus={joinLiveStatus}
-        joinBpm={joinBpm}
-        inputDisabled={joinInputDisabled}
+        joinStatus={join.status}
+        joinLiveStatus={join.liveStatus}
+        joinBpm={join.bpm}
+        inputDisabled={join.inputDisabled}
         bind:inputEl={joinInputEl}
         bind:beatEl={joinBeatEl}
         onCodeLineClick={onJoinCodeLineClick}
@@ -716,7 +654,7 @@
     </div>
   </main>
 
-  <MetaRow appVersion={config.appVersion} backendText={backendText} backendState={backendState} backendTitle={backendTitle} />
+  <MetaRow appVersion={config.appVersion} backendText={ui.backendText} backendState={ui.backendState} backendTitle={ui.backendTitle} />
 </div>
 
-<QrModal open={qrOpen} bind:qrNodeEl={qrNodeEl} onClose={closeQrModal} />
+<QrModal open={ui.qrOpen} bind:qrNodeEl={qrNodeEl} onClose={closeQrModal} />
