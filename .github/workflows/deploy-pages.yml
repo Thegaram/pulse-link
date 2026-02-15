@@ -23,6 +23,7 @@ jobs:
   build:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    environment: github-pages
 
     steps:
       - name: Checkout
@@ -48,6 +49,9 @@ jobs:
           ABLY_TOKEN: ${{ secrets.ABLY_TOKEN }}
           ABLY_CLIENT_ID: ${{ secrets.ABLY_CLIENT_ID }}
         run: npm run build -- --base "/${{ github.event.repository.name }}/"
+
+      - name: Include runtime config in artifact
+        run: cp config.local.json dist/config.local.json
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
