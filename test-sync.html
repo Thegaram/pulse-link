@@ -384,6 +384,13 @@
         }
       });
 
+      // Handle sync stats from leader
+      peerManager.onControl((data) => {
+        if (data.type === 'sync_stats') {
+          updateStats(data.payload);
+        }
+      });
+
       peerManager.onConnected(() => {
         showStatus(peerStatus, `Connected! Synchronizing clocks...`, true);
         statsSection.style.display = 'block';
@@ -395,14 +402,16 @@
     });
 
     // Leader: Send periodic pings
+    let pingSeq = 0;
     function startPinging() {
       setInterval(() => {
         if (role === 'leader' && leaderManager && connectedPeerId) {
+          const t1 = performance.now();
           const ping = {
             type: 'time_ping',
             payload: {
-              seq: performance.now(),
-              t1LeaderMs: performance.now()
+              seq: pingSeq++,
+              t1LeaderMs: t1
             }
           };
           leaderManager.sendTimeSync(connectedPeerId, ping);
@@ -440,6 +449,12 @@
       );
 
       updateStats(stats);
+
+      // Send stats to peer so they can display them
+      leaderManager.sendControl(connectedPeerId, {
+        type: 'sync_stats',
+        payload: stats
+      });
     }
 
     function updateStats(stats) {
@@ -471,8 +486,6 @@
         statusValue.textContent = '⋯ Syncing';
         statusValue.className = 'stat-value warning';
       }
-
-      console.log(`📊 Stats: RTT=${rtt}ms, Offset=${offset}ms, Samples=${stats.samples}, Stable=${stats.stable}`);
     }
 
     function showStatus(element, text, success) {
