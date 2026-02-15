@@ -1,4 +1,4 @@
-import { HOST_ROOM_STORAGE_KEY, MAX_BPM, MIN_BPM, type Mode } from '../../ui/app-shell-constants.js';
+import { MAX_BPM, MIN_BPM, type Mode } from '../../ui/app-shell-constants.js';
 import type { SignalingBackend } from '../../signaling/factory.js';
 import type { BackendState } from './ui.js';
 
@@ -37,34 +37,6 @@ export function formatJoinCodeVisual(code: string): string {
 
 export function getHostRoomCodeDisplay(roomId: string | null): string {
   return roomId ?? '------';
-}
-
-export function roomUrl(roomId: string): string {
-  const base = `${window.location.origin}${window.location.pathname}`;
-  return `${base}?room=${roomId}`;
-}
-
-export function loadStoredHostRoomCode(): string | null {
-  const stored = localStorage.getItem(HOST_ROOM_STORAGE_KEY);
-  if (!stored) {
-    return null;
-  }
-
-  const normalized = stored.toUpperCase().trim();
-  if (!/^[A-Z0-9]{6}$/.test(normalized)) {
-    localStorage.removeItem(HOST_ROOM_STORAGE_KEY);
-    return null;
-  }
-
-  return normalized;
-}
-
-export function persistHostRoomCode(code: string | null): void {
-  if (code) {
-    localStorage.setItem(HOST_ROOM_STORAGE_KEY, code);
-  } else {
-    localStorage.removeItem(HOST_ROOM_STORAGE_KEY);
-  }
 }
 
 export function shouldAutoJoin(activeTab: Mode, inProgress: boolean, hasPeer: boolean, code: string): boolean {

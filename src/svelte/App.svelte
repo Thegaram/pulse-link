@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { get } from 'svelte/store';
   import { onDestroy, onMount, tick } from 'svelte';
   import Tabs from './components/Tabs.svelte';
   import HostPanel from './components/HostPanel.svelte';
@@ -9,61 +10,58 @@
   import { createSignalingTransport } from '../signaling/factory.js';
   import { createTransportRuntime } from '../realtime/runtime.js';
   import type { TransportRuntime } from '../realtime/runtime.js';
-  import { LeaderStateMachine } from '../state/leader-machine.js';
-  import { PeerStateMachine } from '../state/peer-machine.js';
   import type { Mode } from '../ui/app-shell-constants.js';
   import type { LoadedConfig } from './config-loader.js';
   import { AppWorkflowController, type BackendState } from './state/controller.js';
-  import { createHostViewState } from './state/host.js';
-  import { createJoinViewState } from './state/join.js';
-  import { createUiState } from './state/ui.js';
   import {
-    backendLabel,
-    clampBpm,
-    formatBackendText,
-    formatJoinCodeVisual,
-    getHostRoomCodeDisplay,
+    hostRoomCodeDisplay,
+    hostState,
+    hostStatusText,
+    setHostBpm,
+    setHostPeerCount,
+    setHostRoomCode,
+    setHostRunning,
+    showHostTemporaryStatus
+  } from './state/host.js';
+  import {
+    joinCodeVisual,
+    joinState,
+    setJoinBpm,
+    setJoinClearCodeOnNextEntry,
+    setJoinCode,
+    setJoinInProgress,
+    setJoinInputDisabled,
+    setJoinLiveStatus,
+    setJoinShowEntry,
+    setJoinShowLive,
+    setJoinStatus
+  } from './state/join.js';
+  import { sessionState, setLeader, setPeer } from './state/session.js';
+  import { backendText, setActiveTab, setBackendLabel, setBackendStatus, setQrOpen, uiState } from './state/ui.js';
+  import { backendLabel, clampBpm, sanitizeCode, shouldAutoJoin } from './state/runtime-ops.js';
+  import {
+    copyTextToClipboard,
     loadStoredHostRoomCode,
     persistHostRoomCode,
-    roomUrl,
-    sanitizeCode,
-    shouldAutoJoin
-  } from './state/runtime-ops.js';
-
-  declare const QRCode: {
-    new (element: HTMLElement, options: {
-      text: string;
-      width: number;
-      height: number;
-      colorDark: string;
-      colorLight: string;
-    }): unknown;
-  };
+    readSharedRoomCodeFromUrl,
+    renderQrCode
+  } from './services/browser.js';
 
   export let config: LoadedConfig;
 
   let transportRuntime: TransportRuntime;
   let workflow: AppWorkflowController | null = null;
 
-  let leader: LeaderStateMachine | null = null;
-  let peer: PeerStateMachine | null = null;
-
-  let host = createHostViewState();
-  let join = createJoinViewState();
-  let ui = createUiState('Ably');
-
   let hostBeatEl: HTMLDivElement | null = null;
   let joinBeatEl: HTMLDivElement | null = null;
   let joinInputEl: HTMLInputElement | null = null;
   let qrNodeEl: HTMLDivElement | null = null;
 
-  $: hasLeader = Boolean(leader);
-  $: activePlayback = host.isRunning;
+  $: hasLeader = Boolean($sessionState.leader);
+  $: activePlayback = $hostState.isRunning;
   $: bpmDisabled = !hasLeader;
   $: startDisabled = !hasLeader || activePlayback;
   $: stopDisabled = !hasLeader || !activePlayback;
-  $: hostRoomCodeDisplay = getHostRoomCodeDisplay(host.currentRoomId);
-  $: joinCodeVisual = formatJoinCodeVisual(join.code);
 
   function errorText(error: unknown): string {
     if (error instanceof Error && error.message) {
@@ -72,56 +70,38 @@
     return 'Connection error';
   }
 
-  function setBackendStatus(state: BackendState, detail = ''): void {
-    ui.backendState = state;
-    ui.backendTitle = detail;
-    ui.backendText = formatBackendText(backendLabel(config.signaling.backend), state);
+  function setBackendStatusWithDetail(state: BackendState, detail = ''): void {
+    setBackendStatus(state, detail);
   }
 
-  function setJoinCode(code: string): void {
-    join.code = sanitizeCode(code);
+  function setJoinCodeValue(code: string): void {
+    setJoinCode(sanitizeCode(code));
   }
 
-  function setJoinInputDisabled(disabled: boolean): void {
-    join.inputDisabled = disabled;
-  }
-
-  function setHostStatus(status: string): void {
-    if (Date.now() < host.statusOverrideUntil) {
-      host.status = host.statusOverrideText;
-      return;
-    }
-    host.status = status;
-  }
-
-  function showHostTemporaryStatus(text: string, durationMs = 1200): void {
-    host.statusOverrideText = text;
-    host.statusOverrideUntil = Date.now() + durationMs;
-    setHostStatus(text);
-  }
-
-  function setHostRoomCode(code: string | null): void {
-    host.currentRoomId = code;
+  function setHostRoomCodeWithPersistence(code: string | null): void {
+    setHostRoomCode(code);
     persistHostRoomCode(code);
   }
 
   function applyHostBpm(value: number): void {
-    host.currentBpm = clampBpm(value);
+    const bpm = clampBpm(value);
+    setHostBpm(bpm);
 
+    const leader = get(sessionState).leader;
     if (!leader) {
       return;
     }
 
     const running = leader.getState() === 'L_RUNNING';
     if (!running) {
-      leader.setBPM(host.currentBpm);
+      leader.setBPM(bpm);
       return;
     }
 
     workflow?.queueRunningBpmUpdate(() => {
-      if (leader) {
-        leader.setBPM(host.currentBpm);
-      }
+      const currentLeader = get(sessionState).leader;
+      const currentBpm = get(hostState).currentBpm;
+      currentLeader?.setBPM(currentBpm);
     });
   }
 
@@ -138,64 +118,44 @@
   }
 
   function showJoinEntry(): void {
-    join.showEntry = true;
-    join.showLive = false;
-    join.inProgress = false;
-    setJoinInputDisabled(false);
+    setJoinShowEntry();
     void tick().then(() => {
       joinInputEl?.focus();
     });
   }
 
   function enableJoinCodeReplaceOnNextEntry(): void {
-    join.clearCodeOnNextEntry = true;
+    setJoinClearCodeOnNextEntry(true);
   }
 
   function showJoinLive(): void {
-    join.showEntry = false;
-    join.showLive = true;
+    setJoinShowLive();
   }
 
   function activateTab(tab: Mode): void {
-    ui.activeTab = tab;
+    setActiveTab(tab);
   }
 
   function initializeWorkflow(): void {
     workflow = new AppWorkflowController(transportRuntime, {
-      getActiveTab: () => ui.activeTab,
-      getCurrentBpm: () => host.currentBpm,
-      getJoinCode: () => join.code,
-      getLeader: () => leader,
-      setLeader: (nextLeader) => {
-        leader = nextLeader;
-      },
-      getPeer: () => peer,
-      setPeer: (nextPeer) => {
-        peer = nextPeer;
-      },
-      setHostRunning: (running) => {
-        host.isRunning = running;
-      },
-      setHostStatus,
-      setJoinStatus: (status) => {
-        join.status = status;
-      },
-      setJoinLiveStatus: (status) => {
-        join.liveStatus = status;
-      },
-      setJoinBpm: (bpm) => {
-        join.bpm = bpm;
-      },
-      setJoinInProgress: (inProgress) => {
-        join.inProgress = inProgress;
-      },
+      getActiveTab: () => get(uiState).activeTab,
+      getCurrentBpm: () => get(hostState).currentBpm,
+      getJoinCode: () => get(joinState).code,
+      getLeader: () => get(sessionState).leader,
+      setLeader,
+      getPeer: () => get(sessionState).peer,
+      setPeer,
+      setHostRunning,
+      setHostPeerCount,
+      setJoinStatus,
+      setJoinLiveStatus,
+      setJoinBpm,
+      setJoinInProgress,
       setJoinInputDisabled,
-      setBackendStatus,
+      setBackendStatus: setBackendStatusWithDetail,
       loadStoredHostRoomCode,
-      setHostRoomCode,
-      showHostTemporaryStatus: (text) => {
-        showHostTemporaryStatus(text);
-      },
+      setHostRoomCode: setHostRoomCodeWithPersistence,
+      showHostTemporaryStatus,
       applyHostBpm,
       errorText,
       showJoinEntry,
@@ -225,60 +185,56 @@
   }
 
   function maybeAutoJoin(): void {
-    if (!shouldAutoJoin(ui.activeTab, join.inProgress, Boolean(peer), join.code)) {
+    const state = get(joinState);
+    const session = get(sessionState);
+    const ui = get(uiState);
+    if (!shouldAutoJoin(ui.activeTab, state.inProgress, Boolean(session.peer), state.code)) {
       return;
     }
 
-    workflow?.joinRoom(join.code).catch((error) => {
+    workflow?.joinRoom(state.code).catch((error) => {
       console.error(error);
-      join.inProgress = false;
+      setJoinInProgress(false);
       setJoinInputDisabled(false);
-      join.status = 'Join failed. Try another code.';
+      setJoinStatus('Join failed. Try another code.');
       enableJoinCodeReplaceOnNextEntry();
       showJoinEntry();
-      setBackendStatus('error', errorText(error));
+      setBackendStatusWithDetail('error', errorText(error));
     });
   }
 
   async function copyCodeOnly(): Promise<void> {
-    if (!host.currentRoomId) {
+    const code = get(hostState).currentRoomId;
+    if (!code) {
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(host.currentRoomId);
+    const copied = await copyTextToClipboard(code);
+    if (copied) {
       showHostTemporaryStatus('Code copied');
-    } catch {
-      // no-op
     }
   }
 
   function closeQrModal(): void {
-    ui.qrOpen = false;
+    setQrOpen(false);
   }
 
   async function openQrModal(event: MouseEvent): Promise<void> {
     event.stopPropagation();
 
-    if (!host.currentRoomId) {
+    const code = get(hostState).currentRoomId;
+    if (!code) {
       return;
     }
 
-    ui.qrOpen = true;
+    setQrOpen(true);
     await tick();
 
     if (!qrNodeEl) {
       return;
     }
 
-    qrNodeEl.innerHTML = '';
-    new QRCode(qrNodeEl, {
-      text: roomUrl(host.currentRoomId),
-      width: 220,
-      height: 220,
-      colorDark: '#111111',
-      colorLight: '#ffffff'
-    });
+    renderQrCode(qrNodeEl, code);
   }
 
   function startHostMetronome(): void {
@@ -290,14 +246,14 @@
   }
 
   function onJoinCodeLineClick(): void {
-    if (!join.inputDisabled) {
+    if (!get(joinState).inputDisabled) {
       joinInputEl?.focus();
     }
   }
 
   function onJoinCodeInput(event: Event): void {
     const target = event.currentTarget as HTMLInputElement;
-    setJoinCode(target.value);
+    setJoinCodeValue(target.value);
     maybeAutoJoin();
   }
 
@@ -307,7 +263,8 @@
       return;
     }
 
-    if (!join.clearCodeOnNextEntry) {
+    const state = get(joinState);
+    if (!state.clearCodeOnNextEntry) {
       return;
     }
 
@@ -318,13 +275,13 @@
     const printable = event.key.length === 1;
     if (printable) {
       setJoinCode('');
-      join.clearCodeOnNextEntry = false;
+      setJoinClearCodeOnNextEntry(false);
       return;
     }
 
     if (event.key === 'Backspace' || event.key === 'Delete') {
       setJoinCode('');
-      join.clearCodeOnNextEntry = false;
+      setJoinClearCodeOnNextEntry(false);
       event.preventDefault();
     }
   }
@@ -332,38 +289,38 @@
   function onJoinCodePaste(event: ClipboardEvent): void {
     event.preventDefault();
     const pasted = (event.clipboardData?.getData('text') ?? '').toUpperCase();
-    join.clearCodeOnNextEntry = false;
-    setJoinCode(pasted);
+    setJoinClearCodeOnNextEntry(false);
+    setJoinCodeValue(pasted);
     maybeAutoJoin();
   }
 
   function onDocumentKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape' && ui.qrOpen) {
+    if (event.key === 'Escape' && get(uiState).qrOpen) {
       closeQrModal();
     }
   }
 
   function onHostTabClick(): void {
-    if (ui.activeTab === 'host') {
+    if (get(uiState).activeTab === 'host') {
       return;
     }
 
     switchToHost().catch((error) => {
       console.error(error);
-      setHostStatus('Connected peers: 0');
-      setBackendStatus('error', errorText(error));
+      setHostPeerCount(0);
+      setBackendStatusWithDetail('error', errorText(error));
     });
   }
 
   function onJoinTabClick(): void {
-    if (ui.activeTab === 'join') {
+    if (get(uiState).activeTab === 'join') {
       return;
     }
 
     switchToJoin().catch((error) => {
       console.error(error);
-      join.status = 'Failed to open join mode.';
-      setBackendStatus('error', errorText(error));
+      setJoinStatus('Failed to open join mode.');
+      setBackendStatusWithDetail('error', errorText(error));
     });
   }
 
@@ -375,24 +332,25 @@
     });
     initializeWorkflow();
 
-    setBackendStatus('idle');
+    setBackendLabel(backendLabel(config.signaling.backend));
+    setBackendStatusWithDetail('idle');
 
     document.addEventListener('keydown', onDocumentKeydown);
     document.addEventListener('pointerup', stopBpmHold);
 
-    const sharedRoom = new URLSearchParams(window.location.search).get('room');
-    if (sharedRoom && sharedRoom.trim().length === 6) {
+    const sharedRoom = readSharedRoomCodeFromUrl();
+    if (sharedRoom) {
       activateTab('join');
-      setJoinCode(sharedRoom.trim().toUpperCase());
+      setJoinCode(sharedRoom);
       showJoinEntry();
-      join.status = 'Joining room...';
+      setJoinStatus('Joining room...');
       maybeAutoJoin();
     } else {
       activateTab('host');
       workflow?.ensureHostRoom().catch((error) => {
         console.error(error);
-        setHostStatus('Connected peers: 0');
-        setBackendStatus('error', errorText(error));
+        setHostPeerCount(0);
+        setBackendStatusWithDetail('error', errorText(error));
       });
     }
 
@@ -410,13 +368,13 @@
 
 <div class="shell">
   <main class="app">
-    <Tabs activeTab={ui.activeTab} onHost={onHostTabClick} onJoin={onJoinTabClick} />
+    <Tabs activeTab={$uiState.activeTab} onHost={onHostTabClick} onJoin={onJoinTabClick} />
     <div class="panel-frame">
       <HostPanel
-        hidden={ui.activeTab !== 'host'}
-        roomCode={hostRoomCodeDisplay}
-        bpm={host.currentBpm}
-        status={host.status}
+        hidden={$uiState.activeTab !== 'host'}
+        roomCode={$hostRoomCodeDisplay}
+        bpm={$hostState.currentBpm}
+        status={$hostStatusText}
         bpmDisabled={bpmDisabled}
         startDisabled={startDisabled}
         stopDisabled={stopDisabled}
@@ -439,15 +397,15 @@
         onStop={stopHostMetronome}
       />
       <JoinPanel
-        hidden={ui.activeTab !== 'join'}
-        showEntry={join.showEntry}
-        showLive={join.showLive}
-        joinCode={join.code}
-        joinCodeVisual={joinCodeVisual}
-        joinStatus={join.status}
-        joinLiveStatus={join.liveStatus}
-        joinBpm={join.bpm}
-        inputDisabled={join.inputDisabled}
+        hidden={$uiState.activeTab !== 'join'}
+        showEntry={$joinState.showEntry}
+        showLive={$joinState.showLive}
+        joinCode={$joinState.code}
+        joinCodeVisual={$joinCodeVisual}
+        joinStatus={$joinState.status}
+        joinLiveStatus={$joinState.liveStatus}
+        joinBpm={$joinState.bpm}
+        inputDisabled={$joinState.inputDisabled}
         bind:inputEl={joinInputEl}
         bind:beatEl={joinBeatEl}
         onCodeLineClick={onJoinCodeLineClick}
@@ -458,7 +416,7 @@
     </div>
   </main>
 
-  <MetaRow appVersion={config.appVersion} backendText={ui.backendText} backendState={ui.backendState} backendTitle={ui.backendTitle} />
+  <MetaRow appVersion={config.appVersion} backendText={$backendText} backendState={$uiState.backendState} backendTitle={$uiState.backendTitle} />
 </div>
 
-<QrModal open={ui.qrOpen} bind:qrNodeEl={qrNodeEl} onClose={closeQrModal} />
+<QrModal open={$uiState.qrOpen} bind:qrNodeEl={qrNodeEl} onClose={closeQrModal} />
