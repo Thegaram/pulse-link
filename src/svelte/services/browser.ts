@@ -43,6 +43,16 @@ export function readSharedRoomCodeFromUrl(): string | null {
   return normalized.length === 6 ? normalized : null;
 }
 
+export function setRoomCodeInUrl(roomCode: string | null): void {
+  const url = new URL(window.location.href);
+  if (roomCode) {
+    url.searchParams.set('room', roomCode);
+  } else {
+    url.searchParams.delete('room');
+  }
+  window.history.replaceState({}, '', url.toString());
+}
+
 export async function copyTextToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);

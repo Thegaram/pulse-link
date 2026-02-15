@@ -86,6 +86,10 @@ export class PeerStateMachine {
 
     // Handle connection
     this.connectionManager.onConnected(() => {
+      this.clearPendingStart();
+      this.clockSync.reset();
+      this.hasClockOffset = false;
+      this.offsetUpdateCount = 0;
       this.state = 'C_SYNCING';
       console.log('✅ Connected to leader, syncing clock...');
       this.emitSyncStatus('Connected. Waiting for host to start.');

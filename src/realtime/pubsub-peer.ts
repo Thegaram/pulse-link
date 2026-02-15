@@ -14,6 +14,7 @@ export class PeerPubSubConnectionManager {
   private leaderId = '';
   private connected = false;
   private joinRetryIntervalId: number | null = null;
+  private static readonly JOIN_ANNOUNCE_INTERVAL_MS = 2000;
 
   private onTimeSyncMessage: DataChannelMessageHandler | null = null;
   private onControlMessage: DataChannelMessageHandler | null = null;
@@ -31,17 +32,7 @@ export class PeerPubSubConnectionManager {
 
   async joinRoom(): Promise<void> {
     await this.sendJoin();
-
-    if (this.joinRetryIntervalId !== null) {
-      clearInterval(this.joinRetryIntervalId);
-    }
-
-    // Keep announcing join until a leader responds.
-    this.joinRetryIntervalId = window.setInterval(() => {
-      if (!this.connected) {
-        void this.sendJoin();
-      }
-    }, 2000);
+    this.startJoinAnnounceLoop();
   }
 
   private async sendJoin(): Promise<void> {
@@ -51,13 +42,13 @@ export class PeerPubSubConnectionManager {
 
   private async handleMessage(message: Message): Promise<void> {
     if (message.type === 'leader_hello') {
+      const wasConnected = this.connected;
+      const previousLeaderId = this.leaderId;
       this.leaderId = message.from;
-      if (!this.connected) {
+      const leaderChanged = wasConnected && previousLeaderId !== '' && previousLeaderId !== this.leaderId;
+
+      if (!wasConnected || leaderChanged) {
         this.connected = true;
-        if (this.joinRetryIntervalId !== null) {
-          clearInterval(this.joinRetryIntervalId);
-          this.joinRetryIntervalId = null;
-        }
         this.onConnectedCallback?.();
       }
       return;
@@ -75,6 +66,17 @@ export class PeerPubSubConnectionManager {
     if (CONTROL_TYPES.has(message.type)) {
       this.onControlMessage?.({ type: message.type, payload: message.payload });
     }
+  }
+
+  private startJoinAnnounceLoop(): void {
+    if (this.joinRetryIntervalId !== null) {
+      clearInterval(this.joinRetryIntervalId);
+    }
+
+    // Keep announcing join periodically even while connected so a refreshed host can rediscover peers.
+    this.joinRetryIntervalId = window.setInterval(() => {
+      void this.sendJoin();
+    }, PeerPubSubConnectionManager.JOIN_ANNOUNCE_INTERVAL_MS);
   }
 
   onTimeSync(handler: DataChannelMessageHandler): void {

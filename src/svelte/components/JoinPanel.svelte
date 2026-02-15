@@ -23,6 +23,8 @@
       onCodeLineClick();
     }
   }
+
+  $: isWaitingForHost = joinLiveStatus.toLowerCase().includes('waiting for host to start');
 </script>
 
 <section class="view" class:hidden>
@@ -49,7 +51,7 @@
 
   <div class="join-live" class:hidden={!showLive}>
     <div class="stage">
-      <div class="beat" bind:this={beatEl}></div>
+      <div class="beat" class:waiting={isWaitingForHost} bind:this={beatEl}></div>
     </div>
     <div class="join-bpm-block">
       <div class="join-bpm-value">{joinBpm}</div>

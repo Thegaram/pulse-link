@@ -114,7 +114,6 @@ export class HostController {
     await leader.closeRoom();
     this.cb.setLeader(null);
     this.cb.setHostRunning(false);
-    this.cb.setHostRoomCode(null);
     this.timers.stopHostStatusTimer();
     this.cb.setHostPeerCount(0);
     this.cb.setBackendStatus('idle');

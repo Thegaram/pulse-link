@@ -45,7 +45,8 @@
     loadStoredHostRoomCode,
     persistHostRoomCode,
     readSharedRoomCodeFromUrl,
-    renderQrCode
+    renderQrCode,
+    setRoomCodeInUrl
   } from './services/browser.js';
 
   export let config: LoadedConfig;
@@ -64,6 +65,13 @@
   $: bpmDisabled = !hasLeader;
   $: startDisabled = !hasLeader || activePlayback;
   $: stopDisabled = !hasLeader || !activePlayback;
+  $: {
+    if ($uiState.activeTab === 'host') {
+      setRoomCodeInUrl($hostState.currentRoomId);
+    } else {
+      setRoomCodeInUrl($joinState.code.length === 6 ? $joinState.code : null);
+    }
+  }
 
   function errorText(error: unknown): string {
     if (error instanceof Error && error.message) {
