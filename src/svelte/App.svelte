@@ -64,6 +64,7 @@
   let workflow: AppWorkflowController | null = null;
   let viewController: ViewController | null = null;
   let isPageUnloading = false;
+  let bootstrapped = false;
 
   let hostBeatEl: HTMLDivElement | null = null;
   let joinBeatEl: HTMLDivElement | null = null;
@@ -77,10 +78,12 @@
   $: stopDisabled = !hasLeader || (!activePlayback && !$hostState.hasPendingResume);
   $: joinRoomCodeDisplay = $sessionState.peer?.getRoomId() ?? ($joinState.code || '------');
   $: {
-    if ($uiState.activeTab === 'host') {
-      setRoomCodeInUrl($hostState.currentRoomId);
-    } else {
-      setRoomCodeInUrl($joinState.code.length === 6 ? $joinState.code : null);
+    if (bootstrapped) {
+      if ($uiState.activeTab === 'host') {
+        setRoomCodeInUrl(null);
+      } else {
+        setRoomCodeInUrl($joinState.code.length === 6 ? $joinState.code : null);
+      }
     }
   }
 
@@ -372,10 +375,7 @@
     const hasRestorableHostSession = Boolean(
       storedHostRoomCode && loadPersistedHostSession(storedHostRoomCode)
     );
-    const shouldRestoreHost =
-      Boolean(storedHostRoomCode) &&
-      hasRestorableHostSession &&
-      (!sharedRoom || sharedRoom === storedHostRoomCode);
+    const shouldRestoreHost = Boolean(storedHostRoomCode) && hasRestorableHostSession && !sharedRoom;
 
     if (shouldRestoreHost) {
       activateTab('host');
@@ -390,6 +390,8 @@
       activateTab('host');
       ensureHostRoomWithErrorHandling();
     }
+
+    bootstrapped = true;
 
     return () => {
       document.removeEventListener('keydown', onDocumentKeydown);
