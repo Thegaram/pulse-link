@@ -12,6 +12,9 @@ import { TransportRuntime, createDefaultTransportRuntime } from '../realtime/run
 
 const MIN_OFFSET_SAMPLES_FOR_START = 2;
 const PEER_SYNC_DELAY_MS = 250;
+const RUNNING_PHASE_CORRECTION_THRESHOLD_MS = 6;
+const RUNNING_PHASE_CORRECTION_MAX_STEP_MS = 12;
+const RUNNING_PHASE_CORRECTION_FACTOR = 0.35;
 
 export class PeerStateMachine {
   private state: PeerState = 'C_IDLE';
@@ -26,6 +29,10 @@ export class PeerStateMachine {
   private offsetUpdateCount: number = 0;
   private pendingStartAnnouncement: StartAnnouncePayload | null = null;
   private pendingStartTimeoutId: number | null = null;
+  private activeStartAnnouncement: StartAnnouncePayload | null = null;
+  private appliedOffsetMsForActiveAnchor: number | null = null;
+  private activeRunId: number = 0;
+  private lastStoppedRunId: number = 0;
 
   constructor(
     myId: string,
@@ -42,6 +49,22 @@ export class PeerStateMachine {
       this.pendingStartTimeoutId = null;
     }
     this.pendingStartAnnouncement = null;
+  }
+
+  private reanchorRunningFromActiveAnnouncement(offsetMs: number): void {
+    if (!this.activeStartAnnouncement || this.state !== 'C_RUNNING') {
+      return;
+    }
+
+    const { bpm, anchorLeaderMs, beatIndexAtAnchor } = this.activeStartAnnouncement;
+    const anchorPeerMs = anchorLeaderMs + offsetMs;
+    this.appliedOffsetMsForActiveAnchor = offsetMs;
+
+    this.metronome.setBeatGrid({
+      bpm,
+      anchorPerformanceMs: anchorPeerMs,
+      beatIndexAtAnchor
+    });
   }
 
   /**
@@ -142,6 +165,22 @@ export class PeerStateMachine {
     this.offsetUpdateCount++;
     this.hasClockOffset = this.offsetUpdateCount >= MIN_OFFSET_SAMPLES_FOR_START;
 
+    if (
+      this.state === 'C_RUNNING' &&
+      this.activeStartAnnouncement &&
+      this.appliedOffsetMsForActiveAnchor !== null
+    ) {
+      const delta = payload.offsetMs - this.appliedOffsetMsForActiveAnchor;
+      if (Math.abs(delta) >= RUNNING_PHASE_CORRECTION_THRESHOLD_MS) {
+        const boundedStep = Math.max(
+          -RUNNING_PHASE_CORRECTION_MAX_STEP_MS,
+          Math.min(RUNNING_PHASE_CORRECTION_MAX_STEP_MS, delta * RUNNING_PHASE_CORRECTION_FACTOR)
+        );
+        const nextOffset = this.appliedOffsetMsForActiveAnchor + boundedStep;
+        this.reanchorRunningFromActiveAnnouncement(nextOffset);
+      }
+    }
+
     // Late join: only schedule start after we have a usable offset sample.
     if (this.pendingStartAnnouncement) {
       if (this.hasClockOffset) {
@@ -158,7 +197,13 @@ export class PeerStateMachine {
    * Handle start announcement from leader
    */
   private handleStartAnnounce(payload: StartAnnouncePayload): void {
+    if (payload.runId <= this.lastStoppedRunId) {
+      return;
+    }
+
+    this.activeRunId = payload.runId;
     console.log('🎵 Received start announcement:', payload);
+    this.activeStartAnnouncement = payload;
 
     // Wait for at least one clock offset sample before scheduling start.
     if (!this.hasClockOffset) {
@@ -181,6 +226,7 @@ export class PeerStateMachine {
     // Convert leader anchor to peer time (using clock offset)
     const offsetMs = this.clockSync.getOffsetMs();
     const anchorPeerMs = anchorLeaderMs + offsetMs;
+    this.appliedOffsetMsForActiveAnchor = offsetMs;
 
     // Set beat grid
     this.metronome.setBeatGrid({
@@ -192,10 +238,13 @@ export class PeerStateMachine {
     // Calculate time until start
     const now = performance.now();
     const delayMs = Math.max(0, anchorPeerMs - now);
-    const startupDelayMs = Math.max(delayMs, PEER_SYNC_DELAY_MS);
+    const startupDelayMs = this.state === 'C_RUNNING' ? delayMs : Math.max(delayMs, PEER_SYNC_DELAY_MS);
+    const wasRunning = this.state === 'C_RUNNING' || this.metronome.running();
 
     console.log(`⏳ Starting in ${startupDelayMs}ms (offset: ${offsetMs}ms)`);
-    this.emitSyncStatus('Synchronizing clocks...');
+    if (!wasRunning) {
+      this.emitSyncStatus('Synchronizing clocks...');
+    }
 
     // Start metronome at anchor time
     this.pendingStartTimeoutId = window.setTimeout(() => {
@@ -204,7 +253,7 @@ export class PeerStateMachine {
       this.state = 'C_RUNNING';
 
       // Notify UI when playback actually begins.
-      if (this.onStartCallback) {
+      if (!wasRunning && this.onStartCallback) {
         this.onStartCallback();
       }
 
@@ -232,6 +281,9 @@ export class PeerStateMachine {
    */
   private handleStopAnnounce(): void {
     this.clearPendingStart();
+    this.lastStoppedRunId = Math.max(this.lastStoppedRunId, this.activeRunId);
+    this.activeStartAnnouncement = null;
+    this.appliedOffsetMsForActiveAnchor = null;
     this.metronome.stop();
     this.state = 'C_SYNCING';
     this.emitSyncStatus('Connected. Waiting for host to start.');
@@ -263,6 +315,10 @@ export class PeerStateMachine {
     this.clockSync.reset();
     this.hasClockOffset = false;
     this.offsetUpdateCount = 0;
+    this.activeStartAnnouncement = null;
+    this.appliedOffsetMsForActiveAnchor = null;
+    this.activeRunId = 0;
+    this.lastStoppedRunId = 0;
 
     console.log('✅ Left room');
   }

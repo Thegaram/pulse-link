@@ -74,6 +74,7 @@ export interface IceCandidatePayload {
 export interface StartAnnouncePayload {
   bpm: number;
   version: number;
+  runId: number;
   anchorLeaderMs: number; // Timestamp in leader's performance.now() clock
   beatIndexAtAnchor: number; // Absolute beat index at anchor
 }

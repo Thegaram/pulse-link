@@ -26,7 +26,10 @@
     }
   }
 
-  $: isWaitingForHost = joinLiveStatus.toLowerCase().includes('waiting for host to start');
+  $: liveStatusLower = joinLiveStatus.toLowerCase();
+  $: isInactiveLiveState =
+    liveStatusLower.includes('waiting for host to start') ||
+    liveStatusLower.includes('synchronizing clocks');
 </script>
 
 <section class="view" class:hidden>
@@ -61,7 +64,7 @@
       <div class="room-code">{roomCodeDisplay}</div>
     </div>
     <div class="stage">
-      <div class="beat" class:waiting={isWaitingForHost} bind:this={beatEl}></div>
+      <div class="beat" class:waiting={isInactiveLiveState} bind:this={beatEl}></div>
     </div>
     <div class="join-bpm-block">
       <div class="join-bpm-value">{joinBpm}</div>

@@ -22,6 +22,7 @@ const PING_INTERVAL_MS = 1000; // Send time ping every 1 second
 const STALE_PEER_TTL_MS = 6000;
 const STALE_PEER_SWEEP_MS = 1000;
 const BPM_CHANGE_LEAD_MS = 300;
+const RUNNING_ANCHOR_REBROADCAST_MS = 4000;
 type ControlMessageType = 'start_announce' | 'stop_announce' | 'param_update' | 'clock_offset' | 'room_closed';
 
 export interface LeaderPersistenceSnapshot {
@@ -42,6 +43,8 @@ export class LeaderStateMachine {
   private pingSeq: Map<string, number> = new Map();
   private clockSyncs: Map<string, ClockSync> = new Map();
   private staleSweepIntervalId: number | null = null;
+  private runningAnchorRebroadcastIntervalId: number | null = null;
+  private activeRunId = 0;
 
   constructor(
     myId: string,
@@ -69,6 +72,7 @@ export class LeaderStateMachine {
 
     const roomId = preferredRoomId ?? generateRoomId();
     this.roomState = new RoomStateManager(roomId, this.myId, bpm);
+    this.activeRunId = 0;
 
     const signaling = this.transportRuntime.createSignaling();
     await signaling.connect(roomId, this.myId);
@@ -225,6 +229,40 @@ export class LeaderStateMachine {
     }
   }
 
+  private broadcastRunningAnchor(): void {
+    if (!this.roomState || !this.connectionManager) {
+      return;
+    }
+
+    const state = this.roomState.getState();
+    if (state.status !== 'running' || state.startAtLeaderMs === undefined) {
+      return;
+    }
+
+    const announcement: StartAnnouncePayload = {
+      bpm: state.bpm,
+      version: state.version,
+      runId: this.activeRunId,
+      anchorLeaderMs: state.startAtLeaderMs,
+      beatIndexAtAnchor: state.beatIndexAtAnchor ?? 0
+    };
+    this.broadcastControl('start_announce', announcement);
+  }
+
+  private startRunningAnchorRebroadcast(): void {
+    this.stopRunningAnchorRebroadcast();
+    this.runningAnchorRebroadcastIntervalId = window.setInterval(() => {
+      this.broadcastRunningAnchor();
+    }, RUNNING_ANCHOR_REBROADCAST_MS);
+  }
+
+  private stopRunningAnchorRebroadcast(): void {
+    if (this.runningAnchorRebroadcastIntervalId !== null) {
+      clearInterval(this.runningAnchorRebroadcastIntervalId);
+      this.runningAnchorRebroadcastIntervalId = null;
+    }
+  }
+
   /**
    * Send current room/playback state to a newly connected peer.
    */
@@ -247,6 +285,7 @@ export class LeaderStateMachine {
       const announcement: StartAnnouncePayload = {
         bpm: state.bpm,
         version: state.version,
+        runId: this.activeRunId,
         anchorLeaderMs: state.startAtLeaderMs,
         beatIndexAtAnchor: state.beatIndexAtAnchor ?? 0
       };
@@ -273,11 +312,13 @@ export class LeaderStateMachine {
     this.roomState.setBeatAnchor(startAtLeaderMs, 0);
     this.roomState.setStatus('running');
     this.state = 'L_RUNNING';
+    this.activeRunId += 1;
 
     // Broadcast start announcement to all peers
     const announcement: StartAnnouncePayload = {
       bpm,
       version: this.roomState.getState().version,
+      runId: this.activeRunId,
       anchorLeaderMs: startAtLeaderMs,
       beatIndexAtAnchor: 0 // Start from beat 0
     };
@@ -291,6 +332,7 @@ export class LeaderStateMachine {
       beatIndexAtAnchor: 0
     });
     this.metronome.start(bpm);
+    this.startRunningAnchorRebroadcast();
 
     console.log(`✅ Metronome started at ${bpm} BPM`);
   }
@@ -306,6 +348,7 @@ export class LeaderStateMachine {
     this.metronome.stop();
     this.roomState?.setStatus('open');
     this.state = 'L_ROOM_OPEN';
+    this.stopRunningAnchorRebroadcast();
 
     // Tell peers to stop while keeping room open for future restarts.
     this.broadcastControl('stop_announce', {});
@@ -330,10 +373,12 @@ export class LeaderStateMachine {
     this.roomState.setBeatAnchor(anchorLeaderMs, beatIndexAtAnchor);
     this.roomState.setStatus('running');
     this.state = 'L_RUNNING';
+    this.activeRunId += 1;
 
     const announcement: StartAnnouncePayload = {
       bpm,
       version: this.roomState.getState().version,
+      runId: this.activeRunId,
       anchorLeaderMs,
       beatIndexAtAnchor
     };
@@ -345,6 +390,7 @@ export class LeaderStateMachine {
       beatIndexAtAnchor
     });
     this.metronome.start(bpm);
+    this.startRunningAnchorRebroadcast();
   }
 
   /**
@@ -391,6 +437,7 @@ export class LeaderStateMachine {
       const announcement: StartAnnouncePayload = {
         bpm,
         version: state.version,
+        runId: this.activeRunId,
         anchorLeaderMs: changeAtLeaderMs,
         beatIndexAtAnchor: changeBeatIndex
       };
@@ -417,6 +464,7 @@ export class LeaderStateMachine {
 
     // Stop metronome
     this.metronome.stop();
+    this.stopRunningAnchorRebroadcast();
     this.stopStalePeerSweep();
 
     // Notify peers
