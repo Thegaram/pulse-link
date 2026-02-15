@@ -1,49 +1,69 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`src/` contains all TypeScript source code, organized by concern:
-- `src/audio/` metronome and click generation
-- `src/sync/` clock sync and drift logic
-- `src/webrtc/` peer/leader channel handling
-- `src/signaling/` signaling transports (Supabase + mock)
-- `src/state/` leader/peer state machines
-- `src/ui/` app controller and UI helpers
 
-Static entry points live at the repo root: `index.html`, `styles.css`, and manual test pages (`test-metronome.html`, `test-webrtc.html`, `test-sync.html`). Compiled output goes to `dist/`.
+`src/` is organized by layer:
+
+- `src/svelte/`: App shell, components, stores, controllers, browser services
+- `src/state/`: transport-agnostic leader/peer state machines
+- `src/realtime/`: connection managers for pub/sub and legacy WebRTC paths
+- `src/signaling/`: signaling transport adapters (`ably`, `supabase`, `mock`)
+- `src/sync/`: clock offset estimation/filtering
+- `src/audio/`: metronome scheduler + click synthesis
+- `src/webrtc/`: legacy RTC connection/channel logic (not default runtime path)
+
+Composition root is `src/svelte/App.svelte`. Build output is `dist/`.
 
 ## Build, Test, and Development Commands
-- `npm run build` compiles TypeScript using `tsconfig.json` into `dist/`.
-- `npm run watch` runs TypeScript in watch mode for active development.
-- `npm run serve` starts a local static server at `http://localhost:8000`.
 
-Typical loop:
-```bash
-npm run watch
-npm run serve
-```
-Then open `index.html` or a `test-*.html` page in the browser.
+- `npm run dev`: starts Vite dev server on `http://localhost:8000`
+- `npm run check`: strict TypeScript checks (`noEmit`)
+- `npm run lint`: ESLint across TS/Svelte
+- `npm run format` / `npm run format:check`: Prettier write/check
+- `npm run lint:secrets`: Secretlint scan
+- `npm run build`: production build to `dist/`
+- `npm run preview`: serve built output on `:8000`
+
+`predev` and `prebuild` run `scripts/generate-local-config.mjs` to create `config.local.json` from `.env` values.
 
 ## Coding Style & Naming Conventions
-Use TypeScript with strict compiler settings (`strict`, `noUnusedLocals`, `noImplicitReturns`).
-- Indentation: 2 spaces.
-- Classes/types: `PascalCase` (for example, `LeaderSyncEngine`).
-- Variables/functions/methods: `camelCase`.
-- File names: kebab-case by module purpose (for example, `leader-machine.ts`, `sync-engine.ts`).
-- Keep modules focused; prefer small, single-responsibility classes.
+
+TypeScript is strict. Keep modules focused and explicit.
+
+- Indentation: 2 spaces
+- Naming: `PascalCase` for types/classes, `camelCase` for values/functions, kebab-case file names
+- Avoid stringly typed behavior decisions in UI; prefer explicit enums/flags in stores/controllers
+- Prefer transport/state logic in `src/state` + `src/realtime`, not Svelte component files
 
 ## Testing Guidelines
-There is currently no automated test runner; testing is manual via browser pages:
-- `test-metronome.html` for audio behavior
-- `test-webrtc.html` for peer connectivity
-- `test-sync.html` for offset/RTT stability
 
-Follow `TESTING.md` for setup details (including Chrome mDNS flag changes for same-machine tab tests). Validate on at least two tabs before submitting significant sync or signaling changes.
+Automated tests are not set up yet; validation is manual.
+
+- Minimum checks: host/join flow, start/stop propagation, BPM changes while running, late join behavior
+- Validate with at least two clients (desktop + mobile preferred)
+- Verify refresh/resume behavior for host and follower
+- Run `npm run check` before committing
 
 ## Commit & Pull Request Guidelines
-Match the existing commit style: concise, imperative summaries (for example, `Fix WebRTC connection issues and add comprehensive debugging`).
-- Keep commits scoped to one logical change.
-- In PRs, include: purpose, key changes, manual test steps run, and any observed sync metrics.
-- Link related issues and include screenshots when UI behavior changes.
 
-## Configuration & Security Tips
-Runtime configuration is in `config.js`. Do not commit secrets or environment-specific credentials. Treat signaling credentials and room identifiers as sensitive when sharing logs.
+Use imperative commit subjects and keep one logical change per commit.
+
+- Include intent, behavioral impact, and manual verification notes
+- For UI changes, include screenshots/video
+- For sync logic changes, include reproduction scenario and observed result
+
+## Architecture Decisions & Constraints
+
+- Static-hosted first: no app-specific backend service is required.
+- Default runtime is pub/sub (`TRANSPORT_MODE='pubsub'`); signaling backend selectable (`ably`, `supabase`, `mock`).
+- Host is source of truth for tempo/run state; followers apply host updates and clock-offset corrections.
+- Followers may continue playback through transient host refresh; host can re-associate to prior room/session.
+- Session continuity relies on browser persistence (`localStorage`) for room code, BPM, and host anchor snapshot.
+- Keep control UX minimal: two tabs (`Host`/`Join`), simple BPM controls, large start/stop actions.
+
+## Security & Configuration Notes
+
+- Never commit `.env` or generated `config.local.json`.
+- Prefer short-lived scoped tokens for signaling providers; do not expose privileged API keys in browser builds.
+- Current protocol is trust-based by room code; treat room IDs and logs as sensitive.
+- URL `?room=` is share-friendly but can leak via screenshots/history.

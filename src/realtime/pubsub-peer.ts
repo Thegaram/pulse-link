@@ -45,7 +45,8 @@ export class PeerPubSubConnectionManager {
       const wasConnected = this.connected;
       const previousLeaderId = this.leaderId;
       this.leaderId = message.from;
-      const leaderChanged = wasConnected && previousLeaderId !== '' && previousLeaderId !== this.leaderId;
+      const leaderChanged =
+        wasConnected && previousLeaderId !== '' && previousLeaderId !== this.leaderId;
 
       if (!wasConnected || leaderChanged) {
         this.connected = true;

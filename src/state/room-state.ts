@@ -83,8 +83,8 @@ export class RoomStateManager {
    */
   getConnectedPeers(): string[] {
     return Object.values(this.state.peers)
-      .filter(p => p.status === 'connected')
-      .map(p => p.peerId);
+      .filter((p) => p.status === 'connected')
+      .map((p) => p.peerId);
   }
 
   /**
@@ -99,7 +99,7 @@ export class RoomStateManager {
    */
   getStalePeerIds(ttlMs: number, nowMs: number = performance.now()): string[] {
     return Object.values(this.state.peers)
-      .filter((peer) => peer.status === 'connected' && (nowMs - peer.lastSeenMs) > ttlMs)
+      .filter((peer) => peer.status === 'connected' && nowMs - peer.lastSeenMs > ttlMs)
       .map((peer) => peer.peerId);
   }
 }

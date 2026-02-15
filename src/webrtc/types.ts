@@ -24,7 +24,7 @@ export type ConnectionStateHandler = (state: RTCConnectionState) => void;
  */
 export interface DataChannelPair {
   timeSync: RTCDataChannel; // Unordered, unreliable for ping/pong
-  control: RTCDataChannel;  // Ordered, reliable for state updates
+  control: RTCDataChannel; // Ordered, reliable for state updates
 }
 
 /**

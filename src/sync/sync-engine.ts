@@ -89,12 +89,7 @@ export class LeaderSyncEngine {
 
     const t4 = performance.now();
 
-    const stats = sync.processPong(
-      pong.t1LeaderMs,
-      pong.t2PeerMs,
-      pong.t3PeerMs,
-      t4
-    );
+    const stats = sync.processPong(pong.t1LeaderMs, pong.t2PeerMs, pong.t3PeerMs, t4);
 
     // Notify stats update
     if (this.onStatsUpdate) {

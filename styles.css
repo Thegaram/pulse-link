@@ -25,7 +25,7 @@ html {
 
 body {
   min-height: 100vh;
-  font-family: "Avenir Next", "SF Pro Display", "Segoe UI", sans-serif;
+  font-family: 'Avenir Next', 'SF Pro Display', 'Segoe UI', sans-serif;
   background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
   color: var(--text);
   display: flex;
@@ -222,7 +222,11 @@ body {
   border: 10px solid #d9e2ed;
   background: linear-gradient(160deg, #f8fbff, #eef3f9);
   box-shadow: inset 0 0 44px rgba(148, 163, 184, 0.16);
-  transition: transform 0.08s ease, border-color 0.08s ease, box-shadow 0.08s ease, background 0.08s ease;
+  transition:
+    transform 0.08s ease,
+    border-color 0.08s ease,
+    box-shadow 0.08s ease,
+    background 0.08s ease;
 }
 
 .beat.waiting,
@@ -237,14 +241,18 @@ body {
 .beat.flash {
   border-color: var(--blue);
   background: linear-gradient(160deg, #e1efff, #cae0ff);
-  box-shadow: 0 0 0 10px rgba(29, 78, 216, 0.14), inset 0 0 36px rgba(29, 78, 216, 0.18);
+  box-shadow:
+    0 0 0 10px rgba(29, 78, 216, 0.14),
+    inset 0 0 36px rgba(29, 78, 216, 0.18);
   transform: scale(1.03);
 }
 
 .beat.downbeat {
   border-color: var(--green);
   background: linear-gradient(160deg, #dcfce7, #bff4d3);
-  box-shadow: 0 0 0 12px rgba(5, 150, 105, 0.14), inset 0 0 38px rgba(5, 150, 105, 0.2);
+  box-shadow:
+    0 0 0 12px rgba(5, 150, 105, 0.14),
+    inset 0 0 38px rgba(5, 150, 105, 0.2);
 }
 
 .host-bpm-value {
@@ -262,8 +270,8 @@ body {
   gap: 10px;
 }
 
-input[type="number"],
-input[type="text"] {
+input[type='number'],
+input[type='text'] {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -276,7 +284,7 @@ input[type="text"] {
   font-variant-numeric: tabular-nums;
 }
 
-input[type="text"] {
+input[type='text'] {
   font-size: 18px;
   letter-spacing: 3px;
   text-transform: uppercase;
@@ -472,7 +480,6 @@ input:focus {
   .join-bpm-value {
     font-size: 50px;
   }
-
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,13 +2,16 @@ import { HOST_ROOM_STORAGE_KEY, HOST_SESSION_STORAGE_KEY } from '../state/consta
 import { sanitizeCode } from '../state/runtime-ops.js';
 
 declare const QRCode: {
-  new (element: HTMLElement, options: {
-    text: string;
-    width: number;
-    height: number;
-    colorDark: string;
-    colorLight: string;
-  }): unknown;
+  new (
+    element: HTMLElement,
+    options: {
+      text: string;
+      width: number;
+      height: number;
+      colorDark: string;
+      colorLight: string;
+    }
+  ): unknown;
 };
 
 export function loadStoredHostRoomCode(): string | null {
@@ -57,10 +60,16 @@ function isValidPersistedHostSession(value: unknown): value is PersistedHostSess
   if (typeof session.running !== 'boolean') {
     return false;
   }
-  if (session.anchorEpochMs !== undefined && (typeof session.anchorEpochMs !== 'number' || !Number.isFinite(session.anchorEpochMs))) {
+  if (
+    session.anchorEpochMs !== undefined &&
+    (typeof session.anchorEpochMs !== 'number' || !Number.isFinite(session.anchorEpochMs))
+  ) {
     return false;
   }
-  if (session.beatIndexAtAnchor !== undefined && (typeof session.beatIndexAtAnchor !== 'number' || !Number.isFinite(session.beatIndexAtAnchor))) {
+  if (
+    session.beatIndexAtAnchor !== undefined &&
+    (typeof session.beatIndexAtAnchor !== 'number' || !Number.isFinite(session.beatIndexAtAnchor))
+  ) {
     return false;
   }
 

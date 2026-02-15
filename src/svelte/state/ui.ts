@@ -24,7 +24,9 @@ const { subscribe, update } = writable<UiState>(initialUiState);
 
 export const uiState = { subscribe };
 
-export const backendText = derived(uiState, ($ui) => formatBackendText($ui.backendLabel, $ui.backendState));
+export const backendText = derived(uiState, ($ui) =>
+  formatBackendText($ui.backendLabel, $ui.backendState)
+);
 
 export function setActiveTab(activeTab: Mode): void {
   update((state) => ({ ...state, activeTab }));

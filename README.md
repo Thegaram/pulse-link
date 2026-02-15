@@ -1,14 +1,18 @@
 # Pulse Link
 
-A minimal shared metronome for in-room sessions.
+[![CI](https://github.com/Thegaram/pulse-link/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Thegaram/pulse-link/actions/workflows/ci.yml)
 
-Pulse Link runs as a static web app, with host and join flows in a simple two-tab UI. Sync and control messages are distributed through managed pub/sub signaling (Ably, Supabase, or local mock).
+Pulse Link is a minimal, static-hosted shared metronome for in-room sessions.  
+One user hosts a room, others join with a 6-character code, and all clients stay tempo/phase aligned.
 
-## Stack
+## High-Level Architecture
 
-- Svelte 5 + Vite UI shell (`src/svelte`)
-- TypeScript runtime for transport, sync, audio, and state machines (`src/state`, `src/realtime`, `src/sync`, `src/audio`)
-- Config-driven signaling backend selection (`config.js` + optional `config.local.json`)
+- UI: Svelte 5 + Vite (`src/svelte`)
+- Core runtime: TypeScript state/sync/audio modules (`src/state`, `src/sync`, `src/audio`)
+- Transport: managed pub/sub signaling backends (`Ably`, `Supabase`, `mock`) via `src/signaling` and `src/realtime`
+- Deployment model: static site only (no app-specific backend required)
+
+Default mode is pub/sub state sync (`TRANSPORT_MODE='pubsub'`). Legacy WebRTC modules still exist but are not the primary path.
 
 ## Development
 
@@ -18,38 +22,24 @@ npm run dev
 # open http://localhost:8000
 ```
 
-### Build and checks
-
 ```bash
 npm run check   # TypeScript typecheck
-npm run build   # Production build to dist/
-npm run preview # Serve dist/ locally on :8000
+npm run lint    # ESLint (TS + Svelte)
+npm run format:check # Prettier check
+npm run lint:secrets # Secret scanning
+npm run build   # production build to dist/
+npm run preview # serve dist/ on :8000
 ```
 
-## Runtime Configuration
+## Runtime Config
 
-- `TRANSPORT_MODE`: currently `pubsub` (default)
-- `SIGNALING_BACKEND`: `mock`, `ably`, or `supabase`
-- Optional local overrides are loaded from `config.local.json` when present.
+- Base config lives in `config.js`.
+- Optional local overrides are loaded from `config.local.json`.
+- `.env` is used locally and transformed into `config.local.json` by `scripts/generate-local-config.mjs` on `dev`/`build`.
 
-### Local secrets
+Use `.env.example` as the template, and keep secrets out of git.
 
-- Put local credentials in `.env` (ignored by git).
-- `npm run dev` and `npm run build` auto-generate `config.local.json` via `scripts/generate-local-config.mjs`.
-- Template: `.env.example`.
+## Deploy
 
-## Svelte Architecture
-
-`src/svelte/App.svelte` is the composition root.
-
-- `src/svelte/components/*`: presentational UI components
-- `src/svelte/state/*`: stores + controllers
-  - stores: `host.ts`, `join.ts`, `ui.ts`, `session.ts`
-  - orchestration: `controller.ts`, `host-controller.ts`, `join-controller.ts`, `view-controller.ts`, `timer-lifecycle.ts`, `controller-types.ts`
-- `src/svelte/services/*`: browser side effects (clipboard, QR, URL/localStorage helpers, beat visual effects)
-
-## Deployment
-
-Build and deploy `dist/` to any static host.
-
-No app-specific backend service is required.
+Publish `dist/` to any static host (for example, GitHub Pages).  
+For production testing, provide signaling credentials via environment-driven `config.local.json` generation.

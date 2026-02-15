@@ -5,11 +5,7 @@
 /**
  * Leader state machine states
  */
-export type LeaderState =
-  | 'L_IDLE'
-  | 'L_ROOM_OPEN'
-  | 'L_RUNNING'
-  | 'L_CLOSING';
+export type LeaderState = 'L_IDLE' | 'L_ROOM_OPEN' | 'L_RUNNING' | 'L_CLOSING';
 
 /**
  * Peer state machine states

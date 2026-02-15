@@ -1,5 +1,11 @@
-// @ts-ignore runtime config is plain JS loaded by the browser build
-import { ABLY_CONFIG, ICE_CONFIG, SIGNALING_BACKEND, SUPABASE_CONFIG, TRANSPORT_MODE } from '../../config.js';
+// @ts-nocheck
+import {
+  ABLY_CONFIG,
+  ICE_CONFIG,
+  SIGNALING_BACKEND,
+  SUPABASE_CONFIG,
+  TRANSPORT_MODE
+} from '../../config.js';
 import { TransportMode } from '../realtime/runtime.js';
 import { SignalingOptions } from '../signaling/factory.js';
 
@@ -32,16 +38,20 @@ async function loadLocalOverrides(): Promise<LocalConfig> {
 }
 
 async function ensureSdkLoaded(backend: SignalingOptions['backend']): Promise<void> {
-  const loadScript = (src: string) => new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-    document.head.appendChild(script);
-  });
+  const loadScript = (src: string) =>
+    new Promise<void>((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+      document.head.appendChild(script);
+    });
 
-  if (backend === 'supabase' && typeof (window as { supabase?: unknown }).supabase === 'undefined') {
+  if (
+    backend === 'supabase' &&
+    typeof (window as { supabase?: unknown }).supabase === 'undefined'
+  ) {
     await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
   }
 

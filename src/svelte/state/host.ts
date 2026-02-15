@@ -24,11 +24,14 @@ let statusOverrideTimerId: number | null = null;
 
 export const hostState = { subscribe };
 
-export const hostRoomCodeDisplay = derived(hostState, ($host) => getHostRoomCodeDisplay($host.currentRoomId));
+export const hostRoomCodeDisplay = derived(hostState, ($host) =>
+  getHostRoomCodeDisplay($host.currentRoomId)
+);
 
-export const hostStatusText = derived(hostState, ($host) => (
-  $host.statusOverrideText || `Connected peers: ${$host.peerCount}`
-));
+export const hostStatusText = derived(
+  hostState,
+  ($host) => $host.statusOverrideText || `Connected peers: ${$host.peerCount}`
+);
 
 export function setHostRoomCode(roomId: string | null): void {
   update((state) => ({ ...state, currentRoomId: roomId }));

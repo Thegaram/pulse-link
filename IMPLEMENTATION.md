@@ -5,15 +5,18 @@ This document summarizes the implementation of Pulse Link following the incremen
 ## ✅ Completed Iterations
 
 ### Iteration 1: Local Metronome ✅
+
 **Deliverable:** Working metronome on one device with BPM control
 
 **Files implemented:**
+
 - `src/audio/context-manager.ts` - AudioContext lifecycle management
 - `src/audio/click-generator.ts` - Audio buffer generation for clicks
 - `src/audio/metronome.ts` - Lookahead scheduler (500ms lookahead, 50ms refill)
 - `test-metronome.html` - Test page for local metronome
 
 **Features:**
+
 - ✅ Metronome plays at selected BPM (40-240)
 - ✅ Accented downbeats every 4 beats (higher pitch)
 - ✅ No drift over time (uses performance.now() + Web Audio API)
@@ -24,9 +27,11 @@ This document summarizes the implementation of Pulse Link following the incremen
 ---
 
 ### Iteration 2: WebRTC Connection ✅
+
 **Deliverable:** Two browser tabs can establish WebRTC DataChannel and exchange messages
 
 **Files implemented:**
+
 - `src/types.ts` - Message protocol and shared types
 - `src/signaling/transport.ts` - Abstract signaling interface
 - `src/signaling/supabase.ts` - Supabase Realtime adapter
@@ -39,6 +44,7 @@ This document summarizes the implementation of Pulse Link following the incremen
 - `test-webrtc.html` - Test page for WebRTC messaging
 
 **Features:**
+
 - ✅ Leader creates room, peers join via room code
 - ✅ WebRTC DataChannels established (time-sync + control)
 - ✅ Two-way messaging between leader and peers
@@ -49,15 +55,18 @@ This document summarizes the implementation of Pulse Link following the incremen
 ---
 
 ### Iteration 3: Time Synchronization ✅
+
 **Deliverable:** Two devices measure and display their clock offset
 
 **Files implemented:**
+
 - `src/sync/stats.ts` - RTT median filtering + exponential moving average
 - `src/sync/clock.ts` - Offset estimation from ping/pong
 - `src/sync/sync-engine.ts` - Continuous ping loop
 - `test-sync.html` - Test page for time sync
 
 **Features:**
+
 - ✅ Ping/pong protocol for clock offset estimation
 - ✅ RTT median filtering (rejects outliers)
 - ✅ Offset stabilizes after 5-10 samples
@@ -68,9 +77,11 @@ This document summarizes the implementation of Pulse Link following the incremen
 ---
 
 ### Iteration 4: Synchronized Metronome ✅
+
 **Deliverable:** Multiple devices play metronome in sync (END-TO-END MVP)
 
 **Files implemented:**
+
 - `src/state/types.ts` - State machine types
 - `src/state/room-state.ts` - Room state management
 - `src/state/leader-machine.ts` - Leader state machine
@@ -81,6 +92,7 @@ This document summarizes the implementation of Pulse Link following the incremen
 - `styles.css` - Dark theme, mobile-responsive styles
 
 **Features:**
+
 - ✅ Leader creates room with custom BPM
 - ✅ Room code display for sharing
 - ✅ QR code generation (CDN: qrcodejs)
@@ -97,6 +109,7 @@ This document summarizes the implementation of Pulse Link following the incremen
 ## 🚧 Iteration 5: Polish & Deploy (NOT YET IMPLEMENTED)
 
 **Planned features:**
+
 - [ ] Wake Lock API for mobile (keep screen on)
 - [ ] iOS warning modal (screen-on requirement)
 - [ ] Cross-browser testing (Chrome, Firefox, Safari, iOS)
@@ -199,21 +212,22 @@ open http://localhost:8000
 
 ```typescript
 // Leader sends ping
-t1 = performance.now()
+t1 = performance.now();
 
 // Peer receives and responds immediately
-t2 = performance.now() // Receive time
-t3 = performance.now() // Send time
+t2 = performance.now(); // Receive time
+t3 = performance.now(); // Send time
 
 // Leader receives pong
-t4 = performance.now()
+t4 = performance.now();
 
 // Calculate RTT and offset
-rtt = (t4 - t1) - (t3 - t2)
-offset = ((t2 - t1) + (t3 - t4)) / 2
+rtt = t4 - t1 - (t3 - t2);
+offset = (t2 - t1 + (t3 - t4)) / 2;
 ```
 
 **Filtering:**
+
 - Median RTT from last 10 samples (rejects outliers)
 - Exponential moving average (α = 0.3) for smoothing
 - Only update offset on best RTT samples
@@ -240,6 +254,7 @@ source.start(audioContextTime)
 ```
 
 **Lookahead:**
+
 - 500ms lookahead window
 - 50ms refill interval
 - Handles performance.now() → AudioContext time conversion precisely
@@ -251,15 +266,16 @@ source.start(audioContextTime)
 timeSyncChannel = pc.createDataChannel('time-sync', {
   ordered: false,
   maxRetransmits: 0
-})
+});
 
 // Channel 2: Control (ordered, reliable)
 controlChannel = pc.createDataChannel('control', {
   ordered: true
-})
+});
 ```
 
 **Why dual channels:**
+
 - Time sync needs < 1ms response (can't wait for retransmits)
 - Control messages need guaranteed delivery (state consistency)
 
@@ -304,6 +320,7 @@ controlChannel = pc.createDataChannel('control', {
    - Test across devices on different networks
 
 2. **Add Wake Lock API:**
+
    ```typescript
    if ('wakeLock' in navigator) {
      await navigator.wakeLock.request('screen');
@@ -329,16 +346,19 @@ controlChannel = pc.createDataChannel('control', {
 ## Performance Metrics
 
 **Expected sync accuracy:**
+
 - Same machine (tabs): < 5ms offset
 - Same WiFi network: < 20ms offset
 - Different networks: < 50ms offset (with TURN)
 
 **RTT expectations:**
+
 - Local tabs: 1-5ms
 - Same WiFi: 10-50ms
 - Internet: 50-200ms
 
 **Stability:**
+
 - No drift over 5+ minutes
 - Offset converges after 5-10 ping samples
 - Phase error < 20ms during playback
@@ -348,6 +368,7 @@ controlChannel = pc.createDataChannel('control', {
 ## Code Quality
 
 ✅ **Clean Code Principles:**
+
 - Single Responsibility (each module has one clear purpose)
 - Small Functions (< 30 lines where possible)
 - Clear Naming (descriptive variable/function names)
@@ -355,11 +376,13 @@ controlChannel = pc.createDataChannel('control', {
 - DRY (no repeated logic)
 
 ✅ **TypeScript Strict Mode:**
+
 - Type safety enforced
 - No implicit any
 - Null checks required
 
 ✅ **Simple Architecture:**
+
 - Composition over inheritance
 - Minimal dependencies (only QR code library)
 - Unidirectional data flow
@@ -372,6 +395,7 @@ controlChannel = pc.createDataChannel('control', {
 **Iterations 1-4 are complete and functional!**
 
 The MVP is ready for testing across multiple devices. The synchronized metronome works with:
+
 - ✅ Sub-20ms accuracy on local networks
 - ✅ Star topology (leader + up to 10 peers)
 - ✅ Dark theme, mobile-responsive UI

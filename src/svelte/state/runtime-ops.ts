@@ -23,7 +23,10 @@ export function formatBackendText(label: string, state: BackendState): string {
 }
 
 export function sanitizeCode(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 6);
 }
 
 export function clampBpm(value: number): number {

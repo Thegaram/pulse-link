@@ -20,7 +20,9 @@ export class HostController {
     this.persistHostSession();
   }
 
-  private setPendingResume(next: { anchorEpochMs: number; beatIndexAtAnchor: number } | null): void {
+  private setPendingResume(
+    next: { anchorEpochMs: number; beatIndexAtAnchor: number } | null
+  ): void {
     this.pendingResume = next;
     this.cb.setHostPendingResume(Boolean(next));
   }
@@ -98,7 +100,9 @@ export class HostController {
     });
 
     const preferredRoomId = forceNewCode ? undefined : this.cb.loadStoredHostRoomCode();
-    const persistedSession = preferredRoomId ? this.cb.loadPersistedHostSession(preferredRoomId) : null;
+    const persistedSession = preferredRoomId
+      ? this.cb.loadPersistedHostSession(preferredRoomId)
+      : null;
     const initialBpm = persistedSession?.bpm ?? this.cb.getCurrentBpm();
     this.cb.applyHostBpm(initialBpm);
 

@@ -33,13 +33,7 @@ export class PeerConnectionManager {
    */
   async joinRoom(): Promise<void> {
     // Send join message to signaling channel
-    const joinMsg = createMessage(
-      this.roomId,
-      this.peerId,
-      '*',
-      'join',
-      { peerId: this.peerId }
-    );
+    const joinMsg = createMessage(this.roomId, this.peerId, '*', 'join', { peerId: this.peerId });
 
     await this.signaling.send(joinMsg);
     console.log(`📤 Sent join request for room: ${this.roomId}`);
@@ -131,13 +125,9 @@ export class PeerConnectionManager {
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
 
-    const answerMsg = createMessage(
-      this.roomId,
-      this.peerId,
-      leaderId,
-      'answer',
-      { sdp: answer.sdp }
-    );
+    const answerMsg = createMessage(this.roomId, this.peerId, leaderId, 'answer', {
+      sdp: answer.sdp
+    });
     await this.signaling.send(answerMsg);
 
     console.log(`📤 Sent answer to leader`);
@@ -210,17 +200,11 @@ export class PeerConnectionManager {
    * Send ICE candidate to leader
    */
   private async sendIceCandidate(candidate: RTCIceCandidate): Promise<void> {
-    const iceMsg = createMessage(
-      this.roomId,
-      this.peerId,
-      this.leaderId,
-      'ice',
-      {
-        candidate: candidate.candidate,
-        sdpMid: candidate.sdpMid,
-        sdpMLineIndex: candidate.sdpMLineIndex
-      }
-    );
+    const iceMsg = createMessage(this.roomId, this.peerId, this.leaderId, 'ice', {
+      candidate: candidate.candidate,
+      sdpMid: candidate.sdpMid,
+      sdpMLineIndex: candidate.sdpMLineIndex
+    });
 
     await this.signaling.send(iceMsg);
   }

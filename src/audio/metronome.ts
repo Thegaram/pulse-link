@@ -18,7 +18,7 @@ const BEATS_PER_MEASURE = 4;
 export interface BeatGrid {
   bpm: number;
   anchorPerformanceMs: number; // Timestamp in performance.now() time
-  beatIndexAtAnchor: number;   // Absolute beat number at anchor
+  beatIndexAtAnchor: number; // Absolute beat number at anchor
 }
 
 export class Metronome {
@@ -35,7 +35,9 @@ export class Metronome {
   private scheduledVisualTimeoutIds: number[] = [];
 
   // Callback for visual sync (called when beat is scheduled)
-  private onBeatScheduledCallback: ((beatIndex: number, isDownbeat: boolean, timeMs: number) => void) | null = null;
+  private onBeatScheduledCallback:
+    | ((beatIndex: number, isDownbeat: boolean, timeMs: number) => void)
+    | null = null;
   private waitingForUserGesture: boolean = false;
   private readonly onUserGesture = () => {
     if (!this.isRunning) {
@@ -43,17 +45,20 @@ export class Metronome {
       return;
     }
 
-    void audioContextManager.resume().then(() => {
-      if (!this.isRunning) {
-        this.disarmUserGestureResume();
-        return;
-      }
+    void audioContextManager
+      .resume()
+      .then(() => {
+        if (!this.isRunning) {
+          this.disarmUserGestureResume();
+          return;
+        }
 
-      this.startSchedulerIfNeeded();
-      this.disarmUserGestureResume();
-    }).catch(() => {
-      // Keep listeners armed until resume succeeds.
-    });
+        this.startSchedulerIfNeeded();
+        this.disarmUserGestureResume();
+      })
+      .catch(() => {
+        // Keep listeners armed until resume succeeds.
+      });
   };
 
   constructor() {}
@@ -128,12 +133,15 @@ export class Metronome {
     }
 
     // Resume audio context (required for user interaction).
-    void audioContextManager.resume().then(() => {
-      this.startSchedulerIfNeeded();
-      this.disarmUserGestureResume();
-    }).catch(() => {
-      this.armUserGestureResume();
-    });
+    void audioContextManager
+      .resume()
+      .then(() => {
+        this.startSchedulerIfNeeded();
+        this.disarmUserGestureResume();
+      })
+      .catch(() => {
+        this.armUserGestureResume();
+      });
   }
 
   /**
@@ -173,7 +181,8 @@ export class Metronome {
       const now = performance.now();
       const msPerBeatOld = 60000 / this.beatGrid.bpm;
       const elapsedMs = now - this.beatGrid.anchorPerformanceMs;
-      const currentBeatIndex = this.beatGrid.beatIndexAtAnchor + Math.floor(elapsedMs / msPerBeatOld);
+      const currentBeatIndex =
+        this.beatGrid.beatIndexAtAnchor + Math.floor(elapsedMs / msPerBeatOld);
 
       // Create new beat grid at current beat with new BPM
       this.beatGrid = {
@@ -207,7 +216,9 @@ export class Metronome {
   /**
    * Register callback for when beats are scheduled (for visual sync)
    */
-  onBeatScheduled(callback: (beatIndex: number, isDownbeat: boolean, timeMs: number) => void): void {
+  onBeatScheduled(
+    callback: (beatIndex: number, isDownbeat: boolean, timeMs: number) => void
+  ): void {
     this.onBeatScheduledCallback = callback;
   }
 
@@ -297,7 +308,7 @@ export class Metronome {
 
     const msPerBeat = 60000 / this.beatGrid.bpm;
     const beatOffset = beatIndex - this.beatGrid.beatIndexAtAnchor;
-    return this.beatGrid.anchorPerformanceMs + (beatOffset * msPerBeat);
+    return this.beatGrid.anchorPerformanceMs + beatOffset * msPerBeat;
   }
 
   /**
@@ -309,7 +320,7 @@ export class Metronome {
     nowContext: number
   ): number {
     const deltaMs = performanceMs - nowPerformance;
-    return nowContext + (deltaMs / 1000);
+    return nowContext + deltaMs / 1000;
   }
 
   /**
@@ -319,7 +330,7 @@ export class Metronome {
     const context = audioContextManager.getContext();
 
     // Determine if this is a downbeat (every 4th beat)
-    const isDownbeat = (beatIndex % BEATS_PER_MEASURE) === 0;
+    const isDownbeat = beatIndex % BEATS_PER_MEASURE === 0;
 
     // Get appropriate click sound
     const buffer = isDownbeat
@@ -381,7 +392,7 @@ export class Metronome {
       try {
         source.stop();
         source.disconnect();
-      } catch (err) {
+      } catch {
         // Source may have already finished or been stopped
       }
     }

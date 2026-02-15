@@ -38,7 +38,14 @@
     setJoinStatus
   } from './state/join.js';
   import { sessionState, setLeader, setPeer } from './state/session.js';
-  import { backendText, setActiveTab, setBackendLabel, setBackendStatus as setUiBackendStatus, setQrOpen, uiState } from './state/ui.js';
+  import {
+    backendText,
+    setActiveTab,
+    setBackendLabel,
+    setBackendStatus as setUiBackendStatus,
+    setQrOpen,
+    uiState
+  } from './state/ui.js';
   import { backendLabel, clampBpm, sanitizeCode } from './state/runtime-ops.js';
   import {
     copyTextToClipboard,
@@ -237,7 +244,12 @@
     const state = get(joinState);
     const session = get(sessionState);
     const ui = get(uiState);
-    if (ui.activeTab !== 'join' || state.inProgress || Boolean(session.peer) || state.code.length !== 6) {
+    if (
+      ui.activeTab !== 'join' ||
+      state.inProgress ||
+      Boolean(session.peer) ||
+      state.code.length !== 6
+    ) {
       return;
     }
 
@@ -402,9 +414,9 @@
         roomCode={$hostRoomCodeDisplay}
         bpm={$hostState.currentBpm}
         status={$hostStatusText}
-        bpmDisabled={bpmDisabled}
-        startDisabled={startDisabled}
-        stopDisabled={stopDisabled}
+        {bpmDisabled}
+        {startDisabled}
+        {stopDisabled}
         bind:beatEl={hostBeatEl}
         onShare={() => {
           void copyCodeOnly();
@@ -444,7 +456,12 @@
     </div>
   </main>
 
-  <MetaRow appVersion={config.appVersion} backendText={$backendText} backendState={$uiState.backendState} backendTitle={$uiState.backendTitle} />
+  <MetaRow
+    appVersion={config.appVersion}
+    backendText={$backendText}
+    backendState={$uiState.backendState}
+    backendTitle={$uiState.backendTitle}
+  />
 </div>
 
-<QrModal open={$uiState.qrOpen} bind:qrNodeEl={qrNodeEl} onClose={closeQrModal} />
+<QrModal open={$uiState.qrOpen} bind:qrNodeEl onClose={closeQrModal} />

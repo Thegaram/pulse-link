@@ -99,5 +99,4 @@ export class JoinController {
 
     this.cb.setJoinInProgress(false);
   }
-
 }

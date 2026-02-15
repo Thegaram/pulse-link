@@ -7,6 +7,7 @@
 WebRTC connections between tabs on the same machine require disabling Chrome's mDNS privacy feature:
 
 1. **Navigate to flags:**
+
    ```
    chrome://flags/#enable-webrtc-hide-local-ips-with-mdns
    ```
@@ -52,9 +53,11 @@ python3 -m http.server 8000
 ### 2. Test Pages
 
 #### Test 1: Local Metronome
+
 **URL:** http://localhost:8000/test-metronome.html
 
 **Tests:**
+
 - ✅ Metronome plays at selected BPM (40-240)
 - ✅ Stop is immediate (no lingering clicks)
 - ✅ BPM changes are instant with no overlaps
@@ -66,11 +69,13 @@ python3 -m http.server 8000
 ---
 
 #### Test 2: WebRTC Connection
+
 **URL:** http://localhost:8000/test-webrtc.html
 
 **Prerequisites:** Chrome mDNS flag disabled (see above)
 
 **Tests:**
+
 1. Open test page in Tab 1
 2. Click "Create Room" → copy room code
 3. Open test page in Tab 2
@@ -80,6 +85,7 @@ python3 -m http.server 8000
 7. Test with 3+ tabs to verify star topology
 
 **Expected Console Logs:**
+
 ```
 ✅ Connected to mock signaling
 ✅ Leader created room
@@ -92,11 +98,13 @@ python3 -m http.server 8000
 ---
 
 #### Test 3: Time Synchronization
+
 **URL:** http://localhost:8000/test-sync.html
 
 **Prerequisites:** Chrome mDNS flag disabled (see above)
 
 **Tests:**
+
 1. Open test page in Tab 1
 2. Click "Create Room"
 3. Open test page in Tab 2
@@ -104,6 +112,7 @@ python3 -m http.server 8000
 5. Watch synchronization stats update in real-time
 
 **Expected Results:**
+
 - RTT: 1-5ms (same machine), 10-50ms (same WiFi)
 - Offset stabilizes after 5-10 samples
 - Status shows "Stable" after stabilization
@@ -112,11 +121,13 @@ python3 -m http.server 8000
 ---
 
 #### Test 4: Synchronized Metronome (Full MVP)
+
 **URL:** http://localhost:8000/index.html
 
 **Prerequisites:** Chrome mDNS flag disabled (see above)
 
 **Tests:**
+
 1. Open main app in Tab 1
 2. Click "Create Room" → set BPM → create
 3. Note the room code (or use QR code)
@@ -126,6 +137,7 @@ python3 -m http.server 8000
 7. Both tabs should play synchronized metronome
 
 **Verification:**
+
 - Use headphones with both devices/tabs side by side
 - Clicks should be synchronized within ~20ms
 - Visual beat indicator should flash in sync
@@ -138,6 +150,7 @@ python3 -m http.server 8000
 For testing across real devices (phones, laptops on same network):
 
 ### Option 1: Use ngrok
+
 ```bash
 # Expose local server to internet
 ngrok http 8000
@@ -147,6 +160,7 @@ https://abc123.ngrok.io/test-webrtc.html
 ```
 
 ### Option 2: Use Local Network IP
+
 ```bash
 # Find your local IP
 ipconfig getifaddr en0  # macOS
@@ -167,6 +181,7 @@ http://192.168.1.x:8000/test-webrtc.html
 **Cause:** Chrome mDNS privacy feature blocking local connections
 
 **Solution:**
+
 1. Disable `chrome://flags/#enable-webrtc-hide-local-ips-with-mdns`
 2. Restart browser
 3. Clear browser cache if still failing
@@ -178,6 +193,7 @@ http://192.168.1.x:8000/test-webrtc.html
 **Cause:** Firewall blocking WebRTC traffic
 
 **Solution:**
+
 1. Check firewall settings
 2. Allow Chrome/browser through firewall
 3. Try disabling firewall temporarily for testing
@@ -189,6 +205,7 @@ http://192.168.1.x:8000/test-webrtc.html
 **Cause:** Browser autoplay policy or audio context not resumed
 
 **Solution:**
+
 1. Ensure you click a button before metronome starts (user interaction required)
 2. Check browser console for Web Audio errors
 3. Check system volume and browser tab not muted
@@ -198,6 +215,7 @@ http://192.168.1.x:8000/test-webrtc.html
 ## Browser Compatibility
 
 ### Desktop
+
 - ✅ Chrome/Chromium (recommended for development)
 - ✅ Firefox
 - ✅ Edge
@@ -205,6 +223,7 @@ http://192.168.1.x:8000/test-webrtc.html
 - ✅ Brave (requires mDNS flag disabled for local testing)
 
 ### Mobile
+
 - ✅ Android Chrome
 - ✅ Android Firefox
 - ⚠️ iOS Safari (requires screen-on, Web Audio limitations)
@@ -216,16 +235,19 @@ http://192.168.1.x:8000/test-webrtc.html
 ### Expected Metrics
 
 **Same Machine (tabs):**
+
 - RTT: 1-5ms
 - Clock offset: < 2ms
 - Sync accuracy: < 5ms
 
 **Same WiFi Network:**
+
 - RTT: 10-50ms
 - Clock offset: < 10ms
 - Sync accuracy: < 20ms
 
 **Cross-Internet (with TURN):**
+
 - RTT: 50-200ms
 - Clock offset: < 30ms
 - Sync accuracy: < 50ms
@@ -245,12 +267,15 @@ http://192.168.1.x:8000/test-webrtc.html
 ### Enable Verbose WebRTC Logging
 
 **Chrome:**
+
 ```
 chrome://webrtc-internals/
 ```
+
 Open this in a separate tab while testing to see detailed WebRTC stats, ICE candidates, and connection states.
 
 **Firefox:**
+
 ```
 about:webrtc
 ```
@@ -258,6 +283,7 @@ about:webrtc
 ### Console Logging
 
 The app includes detailed console logging:
+
 - 🧊 ICE-related messages
 - 🔗 Connection state changes
 - 📤 Outgoing messages
@@ -285,6 +311,7 @@ For production deployment testing:
 ## Automated Testing (Future)
 
 Currently using manual browser tests. Future improvements:
+
 - Playwright/Puppeteer for automated WebRTC testing
 - Headless browser testing for CI/CD
 - Synthetic network conditions testing

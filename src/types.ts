@@ -10,7 +10,7 @@ export interface Message {
   v: 1;
   roomId: string;
   from: string;
-  to: string | "*"; // "*" for broadcast
+  to: string | '*'; // "*" for broadcast
   type: MessageType;
   ts: number; // performance.now() timestamp
   payload: any;
@@ -18,21 +18,21 @@ export interface Message {
 
 export type MessageType =
   // Signaling messages (Supabase Realtime)
-  | "join"
-  | "peer_bye"
-  | "leader_hello"
-  | "offer"
-  | "answer"
-  | "ice"
+  | 'join'
+  | 'peer_bye'
+  | 'leader_hello'
+  | 'offer'
+  | 'answer'
+  | 'ice'
   // Control channel messages (WebRTC DataChannel)
-  | "start_announce"
-  | "stop_announce"
-  | "param_update"
-  | "clock_offset"
-  | "room_closed"
+  | 'start_announce'
+  | 'stop_announce'
+  | 'param_update'
+  | 'clock_offset'
+  | 'room_closed'
   // Time sync channel messages (WebRTC DataChannel)
-  | "time_ping"
-  | "time_pong";
+  | 'time_ping'
+  | 'time_pong';
 
 /**
  * Payload for join message (peer → signaling)
@@ -109,8 +109,8 @@ export interface TimePingPayload {
 export interface TimePongPayload {
   seq: number;
   t1LeaderMs: number; // Original leader send time
-  t2PeerMs: number;   // Peer receive time
-  t3PeerMs: number;   // Peer send time
+  t2PeerMs: number; // Peer receive time
+  t3PeerMs: number; // Peer send time
 }
 
 /**
@@ -118,7 +118,7 @@ export interface TimePongPayload {
  */
 export interface PeerConnState {
   peerId: string;
-  status: "connecting" | "connected" | "disconnected";
+  status: 'connecting' | 'connected' | 'disconnected';
   lastSeenMs: number;
 }
 
@@ -130,7 +130,7 @@ export interface RoomState {
   leaderId: string;
   bpm: number;
   version: number;
-  status: "open" | "running" | "closed";
+  status: 'open' | 'running' | 'closed';
   startAtLeaderMs?: number;
   beatIndexAtAnchor?: number;
   peers: Record<string, PeerConnState>;
@@ -142,7 +142,7 @@ export interface RoomState {
 export function createMessage(
   roomId: string,
   from: string,
-  to: string | "*",
+  to: string | '*',
   type: MessageType,
   payload: any
 ): Message {

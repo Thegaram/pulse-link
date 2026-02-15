@@ -20,7 +20,10 @@ function parseEnv(contents) {
     const key = line.slice(0, index).trim();
     let value = line.slice(index + 1).trim();
 
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
       value = value.slice(1, -1);
     }
 

@@ -66,13 +66,9 @@ export class LeaderConnectionManager {
     console.log(`👤 Peer joined: ${peerId}`);
 
     // Send leader hello
-    const helloMsg = createMessage(
-      this.roomId,
-      this.leaderId,
-      peerId,
-      'leader_hello',
-      { leaderId: this.leaderId }
-    );
+    const helloMsg = createMessage(this.roomId, this.leaderId, peerId, 'leader_hello', {
+      leaderId: this.leaderId
+    });
     await this.signaling.send(helloMsg);
 
     // Create peer connection
@@ -151,13 +147,7 @@ export class LeaderConnectionManager {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const offerMsg = createMessage(
-      this.roomId,
-      this.leaderId,
-      peerId,
-      'offer',
-      { sdp: offer.sdp }
-    );
+    const offerMsg = createMessage(this.roomId, this.leaderId, peerId, 'offer', { sdp: offer.sdp });
     await this.signaling.send(offerMsg);
 
     console.log(`📤 Sent offer to ${peerId}`);
@@ -209,17 +199,11 @@ export class LeaderConnectionManager {
    * Send ICE candidate to peer
    */
   private async sendIceCandidate(peerId: string, candidate: RTCIceCandidate): Promise<void> {
-    const iceMsg = createMessage(
-      this.roomId,
-      this.leaderId,
-      peerId,
-      'ice',
-      {
-        candidate: candidate.candidate,
-        sdpMid: candidate.sdpMid,
-        sdpMLineIndex: candidate.sdpMLineIndex
-      }
-    );
+    const iceMsg = createMessage(this.roomId, this.leaderId, peerId, 'ice', {
+      candidate: candidate.candidate,
+      sdpMid: candidate.sdpMid,
+      sdpMLineIndex: candidate.sdpMLineIndex
+    });
 
     await this.signaling.send(iceMsg);
   }
@@ -338,8 +322,8 @@ export class LeaderConnectionManager {
    */
   getConnectedPeers(): string[] {
     return Array.from(this.peers.values())
-      .filter(p => p.connected)
-      .map(p => p.peerId);
+      .filter((p) => p.connected)
+      .map((p) => p.peerId);
   }
 
   /**

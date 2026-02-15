@@ -50,14 +50,14 @@ export class ClockSync {
     t4LeaderMs: number
   ): ClockStats {
     // Calculate RTT
-    const rtt = (t4LeaderMs - t1LeaderMs) - (t3PeerMs - t2PeerMs);
+    const rtt = t4LeaderMs - t1LeaderMs - (t3PeerMs - t2PeerMs);
 
     // Add to window
     this.rttWindow.add(rtt);
     this.lastRTT = rtt;
 
     // Calculate raw offset
-    const rawOffset = ((t2PeerMs - t1LeaderMs) + (t3PeerMs - t4LeaderMs)) / 2;
+    const rawOffset = (t2PeerMs - t1LeaderMs + (t3PeerMs - t4LeaderMs)) / 2;
 
     // Get median RTT for filtering
     const medianRTT = this.rttWindow.getMedian();

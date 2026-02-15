@@ -32,13 +32,21 @@ export class HostPubSubConnectionManager {
         this.handlePeerBye(message.from);
         return;
       case 'time_pong':
-        this.onTimeSyncMessage?.({ peerId: message.from, type: 'time_pong', payload: message.payload });
+        this.onTimeSyncMessage?.({
+          peerId: message.from,
+          type: 'time_pong',
+          payload: message.payload
+        });
         return;
       default:
         if (message.from === this.leaderId) {
           return;
         }
-        this.onControlMessage?.({ peerId: message.from, type: message.type, payload: message.payload });
+        this.onControlMessage?.({
+          peerId: message.from,
+          type: message.type,
+          payload: message.payload
+        });
     }
   }
 

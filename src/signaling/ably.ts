@@ -39,7 +39,9 @@ export class AblySignaling implements SignalingTransport {
     const token = looksLikeApiKey ? '' : normalizedToken;
 
     if (!key && !token) {
-      throw new Error('Ably config missing credentials. Set ABLY_CONFIG.key or ABLY_CONFIG.token in config.js.');
+      throw new Error(
+        'Ably config missing credentials. Set ABLY_CONFIG.key or ABLY_CONFIG.token in config.js.'
+      );
     }
 
     // @ts-ignore

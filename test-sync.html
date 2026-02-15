@@ -1,501 +1,493 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Test: Time Synchronization</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1a1a1a;
-      color: #fff;
-      padding: 20px;
-    }
-
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-
-    h1 {
-      font-size: 28px;
-      margin-bottom: 8px;
-    }
-
-    .subtitle {
-      color: #888;
-      font-size: 14px;
-      margin-bottom: 24px;
-    }
-
-    .section {
-      background: #2a2a2a;
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 16px;
-    }
-
-    .section h2 {
-      font-size: 18px;
-      margin-bottom: 16px;
-      color: #00d4ff;
-    }
-
-    .controls {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
-
-    button {
-      padding: 12px 24px;
-      font-size: 14px;
-      font-weight: 600;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      background: #00d4ff;
-      color: #1a1a1a;
-    }
-
-    button:hover {
-      background: #00b8e6;
-    }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .status {
-      padding: 12px;
-      background: #1a1a1a;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      font-size: 14px;
-    }
-
-    .status.connected {
-      background: #00d4ff22;
-      color: #00d4ff;
-      border: 1px solid #00d4ff;
-    }
-
-    .status.synced {
-      background: #4ade8022;
-      color: #4ade80;
-      border: 1px solid #4ade80;
-    }
-
-    .room-code {
-      font-size: 32px;
-      font-weight: 700;
-      color: #00d4ff;
-      text-align: center;
-      margin: 16px 0;
-      letter-spacing: 4px;
-    }
-
-    input[type="text"] {
-      padding: 12px;
-      background: #1a1a1a;
-      border: 1px solid #444;
-      border-radius: 8px;
-      color: #fff;
-      font-size: 14px;
-    }
-
-    input[type="text"]:focus {
-      outline: none;
-      border-color: #00d4ff;
-    }
-
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-top: 16px;
-    }
-
-    .stat-box {
-      background: #1a1a1a;
-      padding: 16px;
-      border-radius: 8px;
-    }
-
-    .stat-label {
-      color: #888;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-    }
-
-    .stat-value {
-      font-size: 28px;
-      font-weight: 700;
-      color: #00d4ff;
-    }
-
-    .stat-value.good {
-      color: #4ade80;
-    }
-
-    .stat-value.warning {
-      color: #fbbf24;
-    }
-
-    .stat-value.error {
-      color: #ff4444;
-    }
-
-    .test-info {
-      background: #1a1a1a;
-      padding: 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      color: #666;
-      line-height: 1.6;
-    }
-
-    .test-info h3 {
-      color: #00d4ff;
-      font-size: 14px;
-      margin-bottom: 8px;
-    }
-
-    .test-info ul {
-      list-style: none;
-      padding-left: 0;
-    }
-
-    .test-info li::before {
-      content: "✓ ";
-      color: #00d4ff;
-      margin-right: 4px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>⏱️ Time Synchronization Test</h1>
-    <p class="subtitle">Iteration 3: Clock offset measurement</p>
-
-    <!-- Leader Section -->
-    <div class="section">
-      <h2>Leader (Tab 1)</h2>
-      <div class="controls">
-        <button id="createBtn">Create Room</button>
-      </div>
-      <div id="leaderStatus" class="status" style="display: none;"></div>
-      <div id="roomCodeDisplay" style="display: none;">
-        <div style="text-align: center; color: #888; font-size: 12px; margin-top: 16px;">Room Code:</div>
-        <div class="room-code" id="roomCode"></div>
-      </div>
-    </div>
-
-    <!-- Peer Section -->
-    <div class="section">
-      <h2>Peer (Tab 2)</h2>
-      <div class="controls">
-        <input type="text" id="roomInput" placeholder="Enter room code" style="width: 200px;">
-        <button id="joinBtn">Join Room</button>
-      </div>
-      <div id="peerStatus" class="status" style="display: none;"></div>
-    </div>
-
-    <!-- Stats Section -->
-    <div class="section" id="statsSection" style="display: none;">
-      <h2>Synchronization Stats</h2>
-      <div class="stats-grid">
-        <div class="stat-box">
-          <div class="stat-label">RTT (Round-Trip Time)</div>
-          <div class="stat-value" id="rttValue">--</div>
-          <div style="color: #666; font-size: 11px; margin-top: 4px;">milliseconds</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Clock Offset</div>
-          <div class="stat-value" id="offsetValue">--</div>
-          <div style="color: #666; font-size: 11px; margin-top: 4px;">milliseconds</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Samples</div>
-          <div class="stat-value" id="samplesValue">--</div>
-          <div style="color: #666; font-size: 11px; margin-top: 4px;">pings received</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Status</div>
-          <div class="stat-value" id="statusValue" style="font-size: 20px;">--</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Test Info -->
-    <div class="test-info">
-      <h3>⚠️ Chrome/Brave Setup Required:</h3>
-      <ul>
-        <li>Go to: <code>chrome://flags/#enable-webrtc-hide-local-ips-with-mdns</code></li>
-        <li>Set to: <strong>Disabled</strong></li>
-        <li>Restart browser</li>
-      </ul>
-      <p style="margin-top: 8px; font-size: 11px;">
-        Required for WebRTC connections between tabs on the same machine.
-      </p>
-
-      <h3 style="margin-top: 16px;">Test Instructions:</h3>
-      <ul>
-        <li>Tab 1: Click "Create Room"</li>
-        <li>Tab 2: Enter room code and "Join Room"</li>
-        <li>Watch stats update in real-time</li>
-        <li>RTT should be < 50ms on same WiFi</li>
-        <li>Offset should stabilize after 10 pings (< 10ms variation)</li>
-        <li>Status shows "Stable" when synchronized</li>
-      </ul>
-      <h3 style="margin-top: 16px;">Expected Results:</h3>
-      <ul>
-        <li>Local testing (same machine): RTT ~1-5ms</li>
-        <li>Same WiFi network: RTT ~10-50ms</li>
-        <li>Offset stabilizes after 5-10 samples</li>
-        <li>Offset stays stable over 5+ minutes</li>
-      </ul>
-    </div>
-  </div>
-
-  <script type="module">
-    import { LeaderConnectionManager } from './dist/webrtc/leader.js';
-    import { PeerConnectionManager } from './dist/webrtc/peer.js';
-    import { MockSignaling } from './dist/signaling/mock.js';
-    import { ClockSync } from './dist/sync/clock.js';
-    import { generateRoomId, generatePeerId } from './dist/types.js';
-    import { ICE_CONFIG } from './config.js';
-
-    let role = null;
-    let leaderManager = null;
-    let peerManager = null;
-    let clockSync = null;
-    let myId = generatePeerId();
-    let currentRoomId = null;
-    let connectedPeerId = null;
-
-    // UI Elements
-    const createBtn = document.getElementById('createBtn');
-    const joinBtn = document.getElementById('joinBtn');
-    const roomInput = document.getElementById('roomInput');
-    const leaderStatus = document.getElementById('leaderStatus');
-    const peerStatus = document.getElementById('peerStatus');
-    const roomCodeDisplay = document.getElementById('roomCodeDisplay');
-    const roomCode = document.getElementById('roomCode');
-    const statsSection = document.getElementById('statsSection');
-    const rttValue = document.getElementById('rttValue');
-    const offsetValue = document.getElementById('offsetValue');
-    const samplesValue = document.getElementById('samplesValue');
-    const statusValue = document.getElementById('statusValue');
-
-    // Create Room (Leader)
-    createBtn.addEventListener('click', async () => {
-      role = 'leader';
-      currentRoomId = generateRoomId();
-      createBtn.disabled = true;
-
-      showStatus(leaderStatus, `Creating room ${currentRoomId}...`, false);
-
-      const signaling = new MockSignaling();
-      await signaling.connect(currentRoomId, myId);
-
-      leaderManager = new LeaderConnectionManager(
-        currentRoomId,
-        myId,
-        signaling,
-        ICE_CONFIG
-      );
-
-      // Create clock sync for peer (leader side tracking)
-      clockSync = new ClockSync();
-
-      // Handle time-sync messages (pongs from peer)
-      leaderManager.onTimeSync((data) => {
-        if (data.type === 'time_pong') {
-          handlePong(data.peerId, data.payload);
-        }
-      });
-
-      // Handle peer connection
-      leaderManager.onPeerConnected((peerId) => {
-        connectedPeerId = peerId;
-        showStatus(leaderStatus, `✅ Peer connected! Syncing clocks...`, true);
-        startPinging();
-      });
-
-      leaderManager.onPeerDisconnected((peerId) => {
-        showStatus(leaderStatus, `❌ Peer disconnected`, false);
-        connectedPeerId = null;
-      });
-
-      roomCode.textContent = currentRoomId;
-      roomCodeDisplay.style.display = 'block';
-      showStatus(leaderStatus, `Room created! Waiting for peer...`, true);
-      statsSection.style.display = 'block';
-
-      console.log(`✅ Leader created room: ${currentRoomId}`);
-    });
-
-    // Join Room (Peer)
-    joinBtn.addEventListener('click', async () => {
-      const roomId = roomInput.value.trim().toUpperCase();
-      if (!roomId) {
-        alert('Please enter a room code');
-        return;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test: Time Synchronization</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
       }
 
-      role = 'peer';
-      currentRoomId = roomId;
-      joinBtn.disabled = true;
-      roomInput.disabled = true;
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #1a1a1a;
+        color: #fff;
+        padding: 20px;
+      }
 
-      showStatus(peerStatus, `Joining room ${roomId}...`, false);
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+      }
 
-      const signaling = new MockSignaling();
-      await signaling.connect(roomId, myId);
+      h1 {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
 
-      peerManager = new PeerConnectionManager(
-        roomId,
-        myId,
-        signaling,
-        ICE_CONFIG
-      );
+      .subtitle {
+        color: #888;
+        font-size: 14px;
+        margin-bottom: 24px;
+      }
 
-      // Create clock sync
-      clockSync = new ClockSync();
+      .section {
+        background: #2a2a2a;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 16px;
+      }
 
-      // Handle time pings from leader
-      peerManager.onTimeSync((data) => {
-        if (data.type === 'time_ping') {
-          handlePing(data.payload);
-        }
-      });
+      .section h2 {
+        font-size: 18px;
+        margin-bottom: 16px;
+        color: #00d4ff;
+      }
 
-      // Handle sync stats from leader
-      peerManager.onControl((data) => {
-        if (data.type === 'sync_stats') {
-          updateStats(data.payload);
-        }
-      });
+      .controls {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
 
-      peerManager.onConnected(() => {
-        showStatus(peerStatus, `Connected! Synchronizing clocks...`, true);
+      button {
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        background: #00d4ff;
+        color: #1a1a1a;
+      }
+
+      button:hover {
+        background: #00b8e6;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .status {
+        padding: 12px;
+        background: #1a1a1a;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        font-size: 14px;
+      }
+
+      .status.connected {
+        background: #00d4ff22;
+        color: #00d4ff;
+        border: 1px solid #00d4ff;
+      }
+
+      .status.synced {
+        background: #4ade8022;
+        color: #4ade80;
+        border: 1px solid #4ade80;
+      }
+
+      .room-code {
+        font-size: 32px;
+        font-weight: 700;
+        color: #00d4ff;
+        text-align: center;
+        margin: 16px 0;
+        letter-spacing: 4px;
+      }
+
+      input[type='text'] {
+        padding: 12px;
+        background: #1a1a1a;
+        border: 1px solid #444;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 14px;
+      }
+
+      input[type='text']:focus {
+        outline: none;
+        border-color: #00d4ff;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+      }
+
+      .stat-box {
+        background: #1a1a1a;
+        padding: 16px;
+        border-radius: 8px;
+      }
+
+      .stat-label {
+        color: #888;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+      }
+
+      .stat-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #00d4ff;
+      }
+
+      .stat-value.good {
+        color: #4ade80;
+      }
+
+      .stat-value.warning {
+        color: #fbbf24;
+      }
+
+      .stat-value.error {
+        color: #ff4444;
+      }
+
+      .test-info {
+        background: #1a1a1a;
+        padding: 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #666;
+        line-height: 1.6;
+      }
+
+      .test-info h3 {
+        color: #00d4ff;
+        font-size: 14px;
+        margin-bottom: 8px;
+      }
+
+      .test-info ul {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      .test-info li::before {
+        content: '✓ ';
+        color: #00d4ff;
+        margin-right: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>⏱️ Time Synchronization Test</h1>
+      <p class="subtitle">Iteration 3: Clock offset measurement</p>
+
+      <!-- Leader Section -->
+      <div class="section">
+        <h2>Leader (Tab 1)</h2>
+        <div class="controls">
+          <button id="createBtn">Create Room</button>
+        </div>
+        <div id="leaderStatus" class="status" style="display: none"></div>
+        <div id="roomCodeDisplay" style="display: none">
+          <div style="text-align: center; color: #888; font-size: 12px; margin-top: 16px">
+            Room Code:
+          </div>
+          <div class="room-code" id="roomCode"></div>
+        </div>
+      </div>
+
+      <!-- Peer Section -->
+      <div class="section">
+        <h2>Peer (Tab 2)</h2>
+        <div class="controls">
+          <input type="text" id="roomInput" placeholder="Enter room code" style="width: 200px" />
+          <button id="joinBtn">Join Room</button>
+        </div>
+        <div id="peerStatus" class="status" style="display: none"></div>
+      </div>
+
+      <!-- Stats Section -->
+      <div class="section" id="statsSection" style="display: none">
+        <h2>Synchronization Stats</h2>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">RTT (Round-Trip Time)</div>
+            <div class="stat-value" id="rttValue">--</div>
+            <div style="color: #666; font-size: 11px; margin-top: 4px">milliseconds</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Clock Offset</div>
+            <div class="stat-value" id="offsetValue">--</div>
+            <div style="color: #666; font-size: 11px; margin-top: 4px">milliseconds</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Samples</div>
+            <div class="stat-value" id="samplesValue">--</div>
+            <div style="color: #666; font-size: 11px; margin-top: 4px">pings received</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Status</div>
+            <div class="stat-value" id="statusValue" style="font-size: 20px">--</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Info -->
+      <div class="test-info">
+        <h3>⚠️ Chrome/Brave Setup Required:</h3>
+        <ul>
+          <li>Go to: <code>chrome://flags/#enable-webrtc-hide-local-ips-with-mdns</code></li>
+          <li>Set to: <strong>Disabled</strong></li>
+          <li>Restart browser</li>
+        </ul>
+        <p style="margin-top: 8px; font-size: 11px">
+          Required for WebRTC connections between tabs on the same machine.
+        </p>
+
+        <h3 style="margin-top: 16px">Test Instructions:</h3>
+        <ul>
+          <li>Tab 1: Click "Create Room"</li>
+          <li>Tab 2: Enter room code and "Join Room"</li>
+          <li>Watch stats update in real-time</li>
+          <li>RTT should be < 50ms on same WiFi</li>
+          <li>Offset should stabilize after 10 pings (< 10ms variation)</li>
+          <li>Status shows "Stable" when synchronized</li>
+        </ul>
+        <h3 style="margin-top: 16px">Expected Results:</h3>
+        <ul>
+          <li>Local testing (same machine): RTT ~1-5ms</li>
+          <li>Same WiFi network: RTT ~10-50ms</li>
+          <li>Offset stabilizes after 5-10 samples</li>
+          <li>Offset stays stable over 5+ minutes</li>
+        </ul>
+      </div>
+    </div>
+
+    <script type="module">
+      import { LeaderConnectionManager } from './dist/webrtc/leader.js';
+      import { PeerConnectionManager } from './dist/webrtc/peer.js';
+      import { MockSignaling } from './dist/signaling/mock.js';
+      import { ClockSync } from './dist/sync/clock.js';
+      import { generateRoomId, generatePeerId } from './dist/types.js';
+      import { ICE_CONFIG } from './config.js';
+
+      let role = null;
+      let leaderManager = null;
+      let peerManager = null;
+      let clockSync = null;
+      let myId = generatePeerId();
+      let currentRoomId = null;
+      let connectedPeerId = null;
+
+      // UI Elements
+      const createBtn = document.getElementById('createBtn');
+      const joinBtn = document.getElementById('joinBtn');
+      const roomInput = document.getElementById('roomInput');
+      const leaderStatus = document.getElementById('leaderStatus');
+      const peerStatus = document.getElementById('peerStatus');
+      const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+      const roomCode = document.getElementById('roomCode');
+      const statsSection = document.getElementById('statsSection');
+      const rttValue = document.getElementById('rttValue');
+      const offsetValue = document.getElementById('offsetValue');
+      const samplesValue = document.getElementById('samplesValue');
+      const statusValue = document.getElementById('statusValue');
+
+      // Create Room (Leader)
+      createBtn.addEventListener('click', async () => {
+        role = 'leader';
+        currentRoomId = generateRoomId();
+        createBtn.disabled = true;
+
+        showStatus(leaderStatus, `Creating room ${currentRoomId}...`, false);
+
+        const signaling = new MockSignaling();
+        await signaling.connect(currentRoomId, myId);
+
+        leaderManager = new LeaderConnectionManager(currentRoomId, myId, signaling, ICE_CONFIG);
+
+        // Create clock sync for peer (leader side tracking)
+        clockSync = new ClockSync();
+
+        // Handle time-sync messages (pongs from peer)
+        leaderManager.onTimeSync((data) => {
+          if (data.type === 'time_pong') {
+            handlePong(data.peerId, data.payload);
+          }
+        });
+
+        // Handle peer connection
+        leaderManager.onPeerConnected((peerId) => {
+          connectedPeerId = peerId;
+          showStatus(leaderStatus, `✅ Peer connected! Syncing clocks...`, true);
+          startPinging();
+        });
+
+        leaderManager.onPeerDisconnected((peerId) => {
+          showStatus(leaderStatus, `❌ Peer disconnected`, false);
+          connectedPeerId = null;
+        });
+
+        roomCode.textContent = currentRoomId;
+        roomCodeDisplay.style.display = 'block';
+        showStatus(leaderStatus, `Room created! Waiting for peer...`, true);
         statsSection.style.display = 'block';
+
+        console.log(`✅ Leader created room: ${currentRoomId}`);
       });
 
-      await peerManager.joinRoom();
-
-      console.log(`✅ Peer joining room: ${roomId}`);
-    });
-
-    // Leader: Send periodic pings
-    let pingSeq = 0;
-    function startPinging() {
-      setInterval(() => {
-        if (role === 'leader' && leaderManager && connectedPeerId) {
-          const t1 = performance.now();
-          const ping = {
-            type: 'time_ping',
-            payload: {
-              seq: pingSeq++,
-              t1LeaderMs: t1
-            }
-          };
-          leaderManager.sendTimeSync(connectedPeerId, ping);
+      // Join Room (Peer)
+      joinBtn.addEventListener('click', async () => {
+        const roomId = roomInput.value.trim().toUpperCase();
+        if (!roomId) {
+          alert('Please enter a room code');
+          return;
         }
-      }, 1500);
-    }
 
-    // Peer: Handle ping and send pong
-    function handlePing(pingPayload) {
-      const t2 = performance.now();
-      const t3 = performance.now();
+        role = 'peer';
+        currentRoomId = roomId;
+        joinBtn.disabled = true;
+        roomInput.disabled = true;
 
-      const pong = {
-        type: 'time_pong',
-        payload: {
-          seq: pingPayload.seq,
-          t1LeaderMs: pingPayload.t1LeaderMs,
-          t2PeerMs: t2,
-          t3PeerMs: t3
-        }
-      };
+        showStatus(peerStatus, `Joining room ${roomId}...`, false);
 
-      peerManager.sendTimeSync(pong);
-    }
+        const signaling = new MockSignaling();
+        await signaling.connect(roomId, myId);
 
-    // Leader: Handle pong and update stats
-    function handlePong(peerId, pongPayload) {
-      const t4 = performance.now();
+        peerManager = new PeerConnectionManager(roomId, myId, signaling, ICE_CONFIG);
 
-      const stats = clockSync.processPong(
-        pongPayload.t1LeaderMs,
-        pongPayload.t2PeerMs,
-        pongPayload.t3PeerMs,
-        t4
-      );
+        // Create clock sync
+        clockSync = new ClockSync();
 
-      updateStats(stats);
+        // Handle time pings from leader
+        peerManager.onTimeSync((data) => {
+          if (data.type === 'time_ping') {
+            handlePing(data.payload);
+          }
+        });
 
-      // Send stats to peer so they can display them
-      leaderManager.sendControl(connectedPeerId, {
-        type: 'sync_stats',
-        payload: stats
+        // Handle sync stats from leader
+        peerManager.onControl((data) => {
+          if (data.type === 'sync_stats') {
+            updateStats(data.payload);
+          }
+        });
+
+        peerManager.onConnected(() => {
+          showStatus(peerStatus, `Connected! Synchronizing clocks...`, true);
+          statsSection.style.display = 'block';
+        });
+
+        await peerManager.joinRoom();
+
+        console.log(`✅ Peer joining room: ${roomId}`);
       });
-    }
 
-    function updateStats(stats) {
-      // RTT
-      const rtt = stats.rtt.toFixed(2);
-      rttValue.textContent = rtt + ' ms';
-      rttValue.className = 'stat-value';
-      if (stats.rtt < 50) rttValue.classList.add('good');
-      else if (stats.rtt < 100) rttValue.classList.add('warning');
-      else rttValue.classList.add('error');
-
-      // Offset
-      const offset = stats.offsetMs.toFixed(2);
-      offsetValue.textContent = offset + ' ms';
-      offsetValue.className = 'stat-value';
-      if (Math.abs(stats.offsetMs) < 20) offsetValue.classList.add('good');
-      else if (Math.abs(stats.offsetMs) < 50) offsetValue.classList.add('warning');
-      else offsetValue.classList.add('error');
-
-      // Samples
-      samplesValue.textContent = stats.samples;
-      samplesValue.className = 'stat-value';
-
-      // Status
-      if (stats.stable) {
-        statusValue.textContent = '✓ Stable';
-        statusValue.className = 'stat-value good';
-      } else {
-        statusValue.textContent = '⋯ Syncing';
-        statusValue.className = 'stat-value warning';
+      // Leader: Send periodic pings
+      let pingSeq = 0;
+      function startPinging() {
+        setInterval(() => {
+          if (role === 'leader' && leaderManager && connectedPeerId) {
+            const t1 = performance.now();
+            const ping = {
+              type: 'time_ping',
+              payload: {
+                seq: pingSeq++,
+                t1LeaderMs: t1
+              }
+            };
+            leaderManager.sendTimeSync(connectedPeerId, ping);
+          }
+        }, 1500);
       }
-    }
 
-    function showStatus(element, text, success) {
-      element.textContent = text;
-      element.className = success ? 'status connected' : 'status';
-      element.style.display = 'block';
-    }
+      // Peer: Handle ping and send pong
+      function handlePing(pingPayload) {
+        const t2 = performance.now();
+        const t3 = performance.now();
 
-    console.log('⏱️ Time Sync Test Page Loaded');
-    console.log('My ID:', myId);
-  </script>
-</body>
+        const pong = {
+          type: 'time_pong',
+          payload: {
+            seq: pingPayload.seq,
+            t1LeaderMs: pingPayload.t1LeaderMs,
+            t2PeerMs: t2,
+            t3PeerMs: t3
+          }
+        };
+
+        peerManager.sendTimeSync(pong);
+      }
+
+      // Leader: Handle pong and update stats
+      function handlePong(peerId, pongPayload) {
+        const t4 = performance.now();
+
+        const stats = clockSync.processPong(
+          pongPayload.t1LeaderMs,
+          pongPayload.t2PeerMs,
+          pongPayload.t3PeerMs,
+          t4
+        );
+
+        updateStats(stats);
+
+        // Send stats to peer so they can display them
+        leaderManager.sendControl(connectedPeerId, {
+          type: 'sync_stats',
+          payload: stats
+        });
+      }
+
+      function updateStats(stats) {
+        // RTT
+        const rtt = stats.rtt.toFixed(2);
+        rttValue.textContent = rtt + ' ms';
+        rttValue.className = 'stat-value';
+        if (stats.rtt < 50) rttValue.classList.add('good');
+        else if (stats.rtt < 100) rttValue.classList.add('warning');
+        else rttValue.classList.add('error');
+
+        // Offset
+        const offset = stats.offsetMs.toFixed(2);
+        offsetValue.textContent = offset + ' ms';
+        offsetValue.className = 'stat-value';
+        if (Math.abs(stats.offsetMs) < 20) offsetValue.classList.add('good');
+        else if (Math.abs(stats.offsetMs) < 50) offsetValue.classList.add('warning');
+        else offsetValue.classList.add('error');
+
+        // Samples
+        samplesValue.textContent = stats.samples;
+        samplesValue.className = 'stat-value';
+
+        // Status
+        if (stats.stable) {
+          statusValue.textContent = '✓ Stable';
+          statusValue.className = 'stat-value good';
+        } else {
+          statusValue.textContent = '⋯ Syncing';
+          statusValue.className = 'stat-value warning';
+        }
+      }
+
+      function showStatus(element, text, success) {
+        element.textContent = text;
+        element.className = success ? 'status connected' : 'status';
+        element.style.display = 'block';
+      }
+
+      console.log('⏱️ Time Sync Test Page Loaded');
+      console.log('My ID:', myId);
+    </script>
+  </body>
 </html>

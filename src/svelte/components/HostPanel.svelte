@@ -29,8 +29,19 @@
 </script>
 
 <section class="view" class:hidden>
-  <div class="room-share" title="Copy code and show QR" role="button" tabindex="0" onclick={onShare} onkeydown={onShareKeydown}>
-    <button class="qr-icon-btn qr-icon-left" aria-label="Generate new room code and reset session" onclick={onRegen}>
+  <div
+    class="room-share"
+    title="Copy code and show QR"
+    role="button"
+    tabindex="0"
+    onclick={onShare}
+    onkeydown={onShareKeydown}
+  >
+    <button
+      class="qr-icon-btn qr-icon-left"
+      aria-label="Generate new room code and reset session"
+      onclick={onRegen}
+    >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M17.7 6.3A8 8 0 1 0 20 12h-2a6 6 0 1 1-1.76-4.24L13 11h8V3l-3.3 3.3z"></path>
       </svg>
@@ -68,8 +79,8 @@
       onpointerup={onBpmPointerStop}
       onpointerleave={onBpmPointerStop}
       onpointercancel={onBpmPointerStop}
-      onclick={onBpmDownClick}
-    >-</button>
+      onclick={onBpmDownClick}>-</button
+    >
     <button
       class="btn btn-soft btn-big"
       aria-label="Increase BPM"
@@ -78,8 +89,8 @@
       onpointerup={onBpmPointerStop}
       onpointerleave={onBpmPointerStop}
       onpointercancel={onBpmPointerStop}
-      onclick={onBpmUpClick}
-    >+</button>
+      onclick={onBpmUpClick}>+</button
+    >
     <button class="btn btn-primary" disabled={startDisabled} onclick={onStart}>Start</button>
     <button class="btn btn-danger" disabled={stopDisabled} onclick={onStop}>Stop</button>
   </div>

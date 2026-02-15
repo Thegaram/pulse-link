@@ -6,7 +6,13 @@
 import { ClockSync } from '../sync/clock.js';
 import { Metronome } from '../audio/metronome.js';
 import { PeerState } from './types.js';
-import { StartAnnouncePayload, ParamUpdatePayload, TimePingPayload, TimePongPayload, ClockOffsetPayload } from '../types.js';
+import {
+  StartAnnouncePayload,
+  ParamUpdatePayload,
+  TimePingPayload,
+  TimePongPayload,
+  ClockOffsetPayload
+} from '../types.js';
 import { PeerConnectionManagerLike } from '../realtime/connection-types.js';
 import { TransportRuntime, createDefaultTransportRuntime } from '../realtime/runtime.js';
 
@@ -81,7 +87,11 @@ export class PeerStateMachine {
     const signaling = this.transportRuntime.createSignaling();
     await signaling.connect(roomId, this.myId);
 
-    this.connectionManager = this.transportRuntime.createPeerConnection(roomId, this.myId, signaling);
+    this.connectionManager = this.transportRuntime.createPeerConnection(
+      roomId,
+      this.myId,
+      signaling
+    );
 
     this.state = 'C_SIGNALING';
 
@@ -158,7 +168,9 @@ export class PeerStateMachine {
    * Handle clock offset update from leader
    */
   private handleClockOffset(payload: ClockOffsetPayload): void {
-    console.log(`⏱️ Clock offset update: ${payload.offsetMs.toFixed(2)}ms (RTT: ${payload.rtt.toFixed(2)}ms)`);
+    console.log(
+      `⏱️ Clock offset update: ${payload.offsetMs.toFixed(2)}ms (RTT: ${payload.rtt.toFixed(2)}ms)`
+    );
 
     // Apply leader-calculated offset directly.
     this.clockSync.setOffsetMs(payload.offsetMs);
@@ -246,7 +258,8 @@ export class PeerStateMachine {
     // Calculate time until start
     const now = performance.now();
     const delayMs = Math.max(0, anchorPeerMs - now);
-    const startupDelayMs = this.state === 'C_RUNNING' ? delayMs : Math.max(delayMs, PEER_SYNC_DELAY_MS);
+    const startupDelayMs =
+      this.state === 'C_RUNNING' ? delayMs : Math.max(delayMs, PEER_SYNC_DELAY_MS);
     const wasRunning = this.state === 'C_RUNNING' || this.metronome.running();
 
     console.log(`⏳ Starting in ${startupDelayMs}ms (offset: ${offsetMs}ms)`);

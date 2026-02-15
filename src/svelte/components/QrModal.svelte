@@ -16,7 +16,16 @@
   }
 </script>
 
-<div class="modal" class:hidden={!open} role="dialog" aria-modal="true" aria-labelledby="qrTitle" tabindex="-1" onclick={onBackdropClick} onkeydown={onModalKeydown}>
+<div
+  class="modal"
+  class:hidden={!open}
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="qrTitle"
+  tabindex="-1"
+  onclick={onBackdropClick}
+  onkeydown={onModalKeydown}
+>
   <div class="modal-card">
     <h2 id="qrTitle">Share Room</h2>
     <div id="qrcode" bind:this={qrNodeEl}></div>

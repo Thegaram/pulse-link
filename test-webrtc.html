@@ -1,439 +1,431 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Test: WebRTC Connection</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test: WebRTC Connection</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1a1a1a;
-      color: #fff;
-      padding: 20px;
-    }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #1a1a1a;
+        color: #fff;
+        padding: 20px;
+      }
 
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
-    }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
 
-    h1 {
-      font-size: 28px;
-      margin-bottom: 8px;
-    }
+      h1 {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
 
-    .subtitle {
-      color: #888;
-      font-size: 14px;
-      margin-bottom: 24px;
-    }
+      .subtitle {
+        color: #888;
+        font-size: 14px;
+        margin-bottom: 24px;
+      }
 
-    .section {
-      background: #2a2a2a;
-      border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 16px;
-    }
+      .section {
+        background: #2a2a2a;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 16px;
+      }
 
-    .section h2 {
-      font-size: 18px;
-      margin-bottom: 16px;
-      color: #00d4ff;
-    }
+      .section h2 {
+        font-size: 18px;
+        margin-bottom: 16px;
+        color: #00d4ff;
+      }
 
-    .controls {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
+      .controls {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
 
-    button {
-      padding: 12px 24px;
-      font-size: 14px;
-      font-weight: 600;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
+      button {
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
 
-    .btn-primary {
-      background: #00d4ff;
-      color: #1a1a1a;
-    }
+      .btn-primary {
+        background: #00d4ff;
+        color: #1a1a1a;
+      }
 
-    .btn-primary:hover {
-      background: #00b8e6;
-    }
+      .btn-primary:hover {
+        background: #00b8e6;
+      }
 
-    .btn-secondary {
-      background: #444;
-      color: #fff;
-    }
+      .btn-secondary {
+        background: #444;
+        color: #fff;
+      }
 
-    .btn-secondary:hover {
-      background: #555;
-    }
+      .btn-secondary:hover {
+        background: #555;
+      }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
 
-    .status {
-      padding: 12px;
-      background: #1a1a1a;
-      border-radius: 8px;
-      margin-bottom: 12px;
-      font-size: 14px;
-    }
+      .status {
+        padding: 12px;
+        background: #1a1a1a;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        font-size: 14px;
+      }
 
-    .status.connected {
-      background: #00d4ff22;
-      color: #00d4ff;
-      border: 1px solid #00d4ff;
-    }
+      .status.connected {
+        background: #00d4ff22;
+        color: #00d4ff;
+        border: 1px solid #00d4ff;
+      }
 
-    .status.error {
-      background: #ff444422;
-      color: #ff4444;
-      border: 1px solid #ff4444;
-    }
+      .status.error {
+        background: #ff444422;
+        color: #ff4444;
+        border: 1px solid #ff4444;
+      }
 
-    .room-code {
-      font-size: 32px;
-      font-weight: 700;
-      color: #00d4ff;
-      text-align: center;
-      margin: 16px 0;
-      letter-spacing: 4px;
-    }
+      .room-code {
+        font-size: 32px;
+        font-weight: 700;
+        color: #00d4ff;
+        text-align: center;
+        margin: 16px 0;
+        letter-spacing: 4px;
+      }
 
-    .message-box {
-      margin-top: 16px;
-    }
+      .message-box {
+        margin-top: 16px;
+      }
 
-    .message-input {
-      display: flex;
-      gap: 8px;
-    }
+      .message-input {
+        display: flex;
+        gap: 8px;
+      }
 
-    input[type="text"] {
-      flex: 1;
-      padding: 12px;
-      background: #1a1a1a;
-      border: 1px solid #444;
-      border-radius: 8px;
-      color: #fff;
-      font-size: 14px;
-    }
+      input[type='text'] {
+        flex: 1;
+        padding: 12px;
+        background: #1a1a1a;
+        border: 1px solid #444;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 14px;
+      }
 
-    input[type="text"]:focus {
-      outline: none;
-      border-color: #00d4ff;
-    }
+      input[type='text']:focus {
+        outline: none;
+        border-color: #00d4ff;
+      }
 
-    .messages {
-      max-height: 200px;
-      overflow-y: auto;
-      background: #1a1a1a;
-      border-radius: 8px;
-      padding: 12px;
-      margin-top: 12px;
-      font-size: 13px;
-      font-family: monospace;
-    }
+      .messages {
+        max-height: 200px;
+        overflow-y: auto;
+        background: #1a1a1a;
+        border-radius: 8px;
+        padding: 12px;
+        margin-top: 12px;
+        font-size: 13px;
+        font-family: monospace;
+      }
 
-    .message {
-      padding: 4px 0;
-      border-bottom: 1px solid #333;
-    }
+      .message {
+        padding: 4px 0;
+        border-bottom: 1px solid #333;
+      }
 
-    .message:last-child {
-      border-bottom: none;
-    }
+      .message:last-child {
+        border-bottom: none;
+      }
 
-    .message.sent {
-      color: #00d4ff;
-    }
+      .message.sent {
+        color: #00d4ff;
+      }
 
-    .message.received {
-      color: #4ade80;
-    }
+      .message.received {
+        color: #4ade80;
+      }
 
-    .test-info {
-      background: #1a1a1a;
-      padding: 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      color: #666;
-      line-height: 1.6;
-    }
+      .test-info {
+        background: #1a1a1a;
+        padding: 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #666;
+        line-height: 1.6;
+      }
 
-    .test-info h3 {
-      color: #00d4ff;
-      font-size: 14px;
-      margin-bottom: 8px;
-    }
+      .test-info h3 {
+        color: #00d4ff;
+        font-size: 14px;
+        margin-bottom: 8px;
+      }
 
-    .test-info ul {
-      list-style: none;
-      padding-left: 0;
-    }
+      .test-info ul {
+        list-style: none;
+        padding-left: 0;
+      }
 
-    .test-info li::before {
-      content: "✓ ";
-      color: #00d4ff;
-      margin-right: 4px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🔗 WebRTC Connection Test</h1>
-    <p class="subtitle">Iteration 2: Two-way DataChannel messaging</p>
+      .test-info li::before {
+        content: '✓ ';
+        color: #00d4ff;
+        margin-right: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔗 WebRTC Connection Test</h1>
+      <p class="subtitle">Iteration 2: Two-way DataChannel messaging</p>
 
-    <!-- Leader Section -->
-    <div class="section">
-      <h2>Leader (Tab 1)</h2>
-      <div class="controls">
-        <button class="btn-primary" id="createBtn">Create Room</button>
-      </div>
-      <div id="leaderStatus" class="status" style="display: none;"></div>
-      <div id="roomCodeDisplay" style="display: none;">
-        <div style="text-align: center; color: #888; font-size: 12px; margin-top: 16px;">Room Code:</div>
-        <div class="room-code" id="roomCode"></div>
-      </div>
-    </div>
-
-    <!-- Peer Section -->
-    <div class="section">
-      <h2>Peer (Tab 2+)</h2>
-      <div class="controls">
-        <input type="text" id="roomInput" placeholder="Enter room code" style="flex: 0 1 200px;">
-        <button class="btn-primary" id="joinBtn">Join Room</button>
-      </div>
-      <div id="peerStatus" class="status" style="display: none;"></div>
-    </div>
-
-    <!-- Messaging Section -->
-    <div class="section" id="messagingSection" style="display: none;">
-      <h2>Messages</h2>
-      <div class="message-box">
-        <div class="message-input">
-          <input type="text" id="messageInput" placeholder="Type a message...">
-          <button class="btn-secondary" id="sendBtn">Send</button>
+      <!-- Leader Section -->
+      <div class="section">
+        <h2>Leader (Tab 1)</h2>
+        <div class="controls">
+          <button class="btn-primary" id="createBtn">Create Room</button>
         </div>
-        <div class="messages" id="messageList"></div>
+        <div id="leaderStatus" class="status" style="display: none"></div>
+        <div id="roomCodeDisplay" style="display: none">
+          <div style="text-align: center; color: #888; font-size: 12px; margin-top: 16px">
+            Room Code:
+          </div>
+          <div class="room-code" id="roomCode"></div>
+        </div>
+      </div>
+
+      <!-- Peer Section -->
+      <div class="section">
+        <h2>Peer (Tab 2+)</h2>
+        <div class="controls">
+          <input type="text" id="roomInput" placeholder="Enter room code" style="flex: 0 1 200px" />
+          <button class="btn-primary" id="joinBtn">Join Room</button>
+        </div>
+        <div id="peerStatus" class="status" style="display: none"></div>
+      </div>
+
+      <!-- Messaging Section -->
+      <div class="section" id="messagingSection" style="display: none">
+        <h2>Messages</h2>
+        <div class="message-box">
+          <div class="message-input">
+            <input type="text" id="messageInput" placeholder="Type a message..." />
+            <button class="btn-secondary" id="sendBtn">Send</button>
+          </div>
+          <div class="messages" id="messageList"></div>
+        </div>
+      </div>
+
+      <!-- Test Info -->
+      <div class="test-info">
+        <h3>⚠️ Chrome/Brave Setup Required:</h3>
+        <ul>
+          <li>Go to: <code>chrome://flags/#enable-webrtc-hide-local-ips-with-mdns</code></li>
+          <li>Set to: <strong>Disabled</strong></li>
+          <li>Restart browser</li>
+        </ul>
+        <p style="margin-top: 8px; font-size: 11px">
+          Chrome's mDNS privacy feature prevents WebRTC connections between tabs on the same
+          machine. This is only needed for local testing; production deployments work normally.
+        </p>
+
+        <h3 style="margin-top: 16px">Test Instructions:</h3>
+        <ul>
+          <li>Tab 1: Click "Create Room" → copy room code</li>
+          <li>Tab 2: Enter room code → click "Join Room"</li>
+          <li>Both tabs should show "Connected"</li>
+          <li>Type messages in either tab → should appear in both</li>
+          <li>Test with 3+ tabs to verify star topology</li>
+        </ul>
       </div>
     </div>
 
-    <!-- Test Info -->
-    <div class="test-info">
-      <h3>⚠️ Chrome/Brave Setup Required:</h3>
-      <ul>
-        <li>Go to: <code>chrome://flags/#enable-webrtc-hide-local-ips-with-mdns</code></li>
-        <li>Set to: <strong>Disabled</strong></li>
-        <li>Restart browser</li>
-      </ul>
-      <p style="margin-top: 8px; font-size: 11px;">
-        Chrome's mDNS privacy feature prevents WebRTC connections between tabs on the same machine.
-        This is only needed for local testing; production deployments work normally.
-      </p>
+    <script type="module">
+      import { LeaderConnectionManager } from './dist/webrtc/leader.js';
+      import { PeerConnectionManager } from './dist/webrtc/peer.js';
+      import { MockSignaling } from './dist/signaling/mock.js';
+      import { generateRoomId, generatePeerId } from './dist/types.js';
+      import { ICE_CONFIG } from './config.js';
 
-      <h3 style="margin-top: 16px;">Test Instructions:</h3>
-      <ul>
-        <li>Tab 1: Click "Create Room" → copy room code</li>
-        <li>Tab 2: Enter room code → click "Join Room"</li>
-        <li>Both tabs should show "Connected"</li>
-        <li>Type messages in either tab → should appear in both</li>
-        <li>Test with 3+ tabs to verify star topology</li>
-      </ul>
-    </div>
-  </div>
+      let role = null; // 'leader' or 'peer'
+      let leaderManager = null;
+      let peerManager = null;
+      let myId = generatePeerId();
+      let currentRoomId = null;
 
-  <script type="module">
-    import { LeaderConnectionManager } from './dist/webrtc/leader.js';
-    import { PeerConnectionManager } from './dist/webrtc/peer.js';
-    import { MockSignaling } from './dist/signaling/mock.js';
-    import { generateRoomId, generatePeerId } from './dist/types.js';
-    import { ICE_CONFIG } from './config.js';
+      // UI Elements
+      const createBtn = document.getElementById('createBtn');
+      const joinBtn = document.getElementById('joinBtn');
+      const roomInput = document.getElementById('roomInput');
+      const sendBtn = document.getElementById('sendBtn');
+      const messageInput = document.getElementById('messageInput');
+      const messageList = document.getElementById('messageList');
+      const messagingSection = document.getElementById('messagingSection');
+      const leaderStatus = document.getElementById('leaderStatus');
+      const peerStatus = document.getElementById('peerStatus');
+      const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+      const roomCode = document.getElementById('roomCode');
 
-    let role = null; // 'leader' or 'peer'
-    let leaderManager = null;
-    let peerManager = null;
-    let myId = generatePeerId();
-    let currentRoomId = null;
+      // Create Room (Leader)
+      createBtn.addEventListener('click', async () => {
+        role = 'leader';
+        currentRoomId = generateRoomId();
 
-    // UI Elements
-    const createBtn = document.getElementById('createBtn');
-    const joinBtn = document.getElementById('joinBtn');
-    const roomInput = document.getElementById('roomInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const messageInput = document.getElementById('messageInput');
-    const messageList = document.getElementById('messageList');
-    const messagingSection = document.getElementById('messagingSection');
-    const leaderStatus = document.getElementById('leaderStatus');
-    const peerStatus = document.getElementById('peerStatus');
-    const roomCodeDisplay = document.getElementById('roomCodeDisplay');
-    const roomCode = document.getElementById('roomCode');
+        createBtn.disabled = true;
+        showStatus(leaderStatus, `Creating room ${currentRoomId}...`, false);
 
-    // Create Room (Leader)
-    createBtn.addEventListener('click', async () => {
-      role = 'leader';
-      currentRoomId = generateRoomId();
+        // Create signaling
+        const signaling = new MockSignaling();
+        await signaling.connect(currentRoomId, myId);
 
-      createBtn.disabled = true;
-      showStatus(leaderStatus, `Creating room ${currentRoomId}...`, false);
+        // Create leader manager
+        leaderManager = new LeaderConnectionManager(currentRoomId, myId, signaling, ICE_CONFIG);
 
-      // Create signaling
-      const signaling = new MockSignaling();
-      await signaling.connect(currentRoomId, myId);
+        // Handle control messages from peers
+        leaderManager.onControl((data) => {
+          if (data.type === 'chat') {
+            displayMessage(`Peer: ${data.text}`, 'received');
+          }
+        });
 
-      // Create leader manager
-      leaderManager = new LeaderConnectionManager(
-        currentRoomId,
-        myId,
-        signaling,
-        ICE_CONFIG
-      );
-
-      // Handle control messages from peers
-      leaderManager.onControl((data) => {
-        if (data.type === 'chat') {
-          displayMessage(`Peer: ${data.text}`, 'received');
-        }
-      });
-
-      // Handle peer connections
-      leaderManager.onPeerConnected((peerId) => {
-        const peerCount = leaderManager.getConnectedPeers().length;
-        showStatus(leaderStatus, `✅ ${peerCount} peer(s) connected`, true);
-      });
-
-      leaderManager.onPeerDisconnected((peerId) => {
-        const peerCount = leaderManager.getConnectedPeers().length;
-        if (peerCount === 0) {
-          showStatus(leaderStatus, `Room created! Waiting for peers...`, true);
-        } else {
+        // Handle peer connections
+        leaderManager.onPeerConnected((peerId) => {
+          const peerCount = leaderManager.getConnectedPeers().length;
           showStatus(leaderStatus, `✅ ${peerCount} peer(s) connected`, true);
-        }
-      });
+        });
 
-      // Show room code
-      roomCode.textContent = currentRoomId;
-      roomCodeDisplay.style.display = 'block';
-      showStatus(leaderStatus, `Room created! Waiting for peers...`, true);
-      messagingSection.style.display = 'block';
+        leaderManager.onPeerDisconnected((peerId) => {
+          const peerCount = leaderManager.getConnectedPeers().length;
+          if (peerCount === 0) {
+            showStatus(leaderStatus, `Room created! Waiting for peers...`, true);
+          } else {
+            showStatus(leaderStatus, `✅ ${peerCount} peer(s) connected`, true);
+          }
+        });
 
-      console.log(`✅ Leader created room: ${currentRoomId}`);
-    });
-
-    // Join Room (Peer)
-    joinBtn.addEventListener('click', async () => {
-      const roomId = roomInput.value.trim().toUpperCase();
-      if (!roomId) {
-        alert('Please enter a room code');
-        return;
-      }
-
-      role = 'peer';
-      currentRoomId = roomId;
-
-      joinBtn.disabled = true;
-      roomInput.disabled = true;
-      showStatus(peerStatus, `Joining room ${roomId}...`, false);
-
-      // Create signaling
-      const signaling = new MockSignaling();
-      await signaling.connect(roomId, myId);
-
-      // Create peer manager
-      peerManager = new PeerConnectionManager(
-        roomId,
-        myId,
-        signaling,
-        ICE_CONFIG
-      );
-
-      // Handle control messages from leader
-      peerManager.onControl((data) => {
-        if (data.type === 'chat') {
-          displayMessage(`Leader: ${data.text}`, 'received');
-        }
-      });
-
-      // Handle connection success
-      peerManager.onConnected(() => {
-        showStatus(peerStatus, `Connected to leader!`, true);
+        // Show room code
+        roomCode.textContent = currentRoomId;
+        roomCodeDisplay.style.display = 'block';
+        showStatus(leaderStatus, `Room created! Waiting for peers...`, true);
         messagingSection.style.display = 'block';
+
+        console.log(`✅ Leader created room: ${currentRoomId}`);
       });
 
-      // Join room
-      await peerManager.joinRoom();
+      // Join Room (Peer)
+      joinBtn.addEventListener('click', async () => {
+        const roomId = roomInput.value.trim().toUpperCase();
+        if (!roomId) {
+          alert('Please enter a room code');
+          return;
+        }
 
-      console.log(`✅ Peer joining room: ${roomId}`);
-    });
+        role = 'peer';
+        currentRoomId = roomId;
 
-    // Send Message
-    sendBtn.addEventListener('click', sendMessage);
-    messageInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        sendMessage();
+        joinBtn.disabled = true;
+        roomInput.disabled = true;
+        showStatus(peerStatus, `Joining room ${roomId}...`, false);
+
+        // Create signaling
+        const signaling = new MockSignaling();
+        await signaling.connect(roomId, myId);
+
+        // Create peer manager
+        peerManager = new PeerConnectionManager(roomId, myId, signaling, ICE_CONFIG);
+
+        // Handle control messages from leader
+        peerManager.onControl((data) => {
+          if (data.type === 'chat') {
+            displayMessage(`Leader: ${data.text}`, 'received');
+          }
+        });
+
+        // Handle connection success
+        peerManager.onConnected(() => {
+          showStatus(peerStatus, `Connected to leader!`, true);
+          messagingSection.style.display = 'block';
+        });
+
+        // Join room
+        await peerManager.joinRoom();
+
+        console.log(`✅ Peer joining room: ${roomId}`);
+      });
+
+      // Send Message
+      sendBtn.addEventListener('click', sendMessage);
+      messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+
+      function sendMessage() {
+        const text = messageInput.value.trim();
+        if (!text) return;
+
+        const message = {
+          type: 'chat',
+          text,
+          ts: performance.now()
+        };
+
+        if (role === 'leader' && leaderManager) {
+          leaderManager.broadcastControl(message);
+          displayMessage(`You: ${text}`, 'sent');
+        } else if (role === 'peer' && peerManager) {
+          peerManager.sendControl(message);
+          displayMessage(`You: ${text}`, 'sent');
+        }
+
+        messageInput.value = '';
       }
-    });
 
-    function sendMessage() {
-      const text = messageInput.value.trim();
-      if (!text) return;
-
-      const message = {
-        type: 'chat',
-        text,
-        ts: performance.now()
-      };
-
-      if (role === 'leader' && leaderManager) {
-        leaderManager.broadcastControl(message);
-        displayMessage(`You: ${text}`, 'sent');
-      } else if (role === 'peer' && peerManager) {
-        peerManager.sendControl(message);
-        displayMessage(`You: ${text}`, 'sent');
+      function displayMessage(text, type) {
+        const div = document.createElement('div');
+        div.className = `message ${type}`;
+        div.textContent = text;
+        messageList.appendChild(div);
+        messageList.scrollTop = messageList.scrollHeight;
       }
 
-      messageInput.value = '';
-    }
+      function showStatus(element, text, success) {
+        element.textContent = text;
+        element.className = success ? 'status connected' : 'status';
+        element.style.display = 'block';
+      }
 
-    function displayMessage(text, type) {
-      const div = document.createElement('div');
-      div.className = `message ${type}`;
-      div.textContent = text;
-      messageList.appendChild(div);
-      messageList.scrollTop = messageList.scrollHeight;
-    }
-
-    function showStatus(element, text, success) {
-      element.textContent = text;
-      element.className = success ? 'status connected' : 'status';
-      element.style.display = 'block';
-    }
-
-    console.log('🔗 WebRTC Test Page Loaded');
-    console.log('My ID:', myId);
-    console.log('Instructions:');
-    console.log('1. Open this page in multiple browser tabs');
-    console.log('2. Tab 1: Click "Create Room"');
-    console.log('3. Tab 2+: Enter room code and click "Join Room"');
-    console.log('4. Exchange messages via WebRTC DataChannels');
-  </script>
-</body>
+      console.log('🔗 WebRTC Test Page Loaded');
+      console.log('My ID:', myId);
+      console.log('Instructions:');
+      console.log('1. Open this page in multiple browser tabs');
+      console.log('2. Tab 1: Click "Create Room"');
+      console.log('3. Tab 2+: Enter room code and click "Join Room"');
+      console.log('4. Exchange messages via WebRTC DataChannels');
+    </script>
+  </body>
 </html>

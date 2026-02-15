@@ -23,7 +23,12 @@ const STALE_PEER_TTL_MS = 6000;
 const STALE_PEER_SWEEP_MS = 1000;
 const BPM_CHANGE_LEAD_MS = 300;
 const RUNNING_ANCHOR_REBROADCAST_MS = 4000;
-type ControlMessageType = 'start_announce' | 'stop_announce' | 'param_update' | 'clock_offset' | 'room_closed';
+type ControlMessageType =
+  | 'start_announce'
+  | 'stop_announce'
+  | 'param_update'
+  | 'clock_offset'
+  | 'room_closed';
 
 export interface LeaderPersistenceSnapshot {
   roomId: string;
@@ -77,7 +82,11 @@ export class LeaderStateMachine {
     const signaling = this.transportRuntime.createSignaling();
     await signaling.connect(roomId, this.myId);
 
-    this.connectionManager = this.transportRuntime.createLeaderConnection(roomId, this.myId, signaling);
+    this.connectionManager = this.transportRuntime.createLeaderConnection(
+      roomId,
+      this.myId,
+      signaling
+    );
 
     // Handle control messages from peers (if needed)
     this.connectionManager.onControl((data) => {
@@ -172,12 +181,7 @@ export class LeaderStateMachine {
     const t4 = performance.now();
 
     // Calculate offset
-    const stats = clockSync.processPong(
-      pong.t1LeaderMs,
-      pong.t2PeerMs,
-      pong.t3PeerMs,
-      t4
-    );
+    const stats = clockSync.processPong(pong.t1LeaderMs, pong.t2PeerMs, pong.t3PeerMs, t4);
 
     this.roomState?.markPeerConnected(peerId);
 
@@ -187,7 +191,9 @@ export class LeaderStateMachine {
       rtt: stats.rtt
     });
 
-    console.log(`⏱️ Peer ${peerId} offset: ${stats.offsetMs.toFixed(2)}ms, RTT: ${stats.rtt.toFixed(2)}ms`);
+    console.log(
+      `⏱️ Peer ${peerId} offset: ${stats.offsetMs.toFixed(2)}ms, RTT: ${stats.rtt.toFixed(2)}ms`
+    );
   }
 
   /**
@@ -420,11 +426,13 @@ export class LeaderStateMachine {
       const elapsedMs = Math.max(0, now - previousStartAtLeaderMs);
       const beatsSinceAnchor = Math.floor(elapsedMs / msPerBeatOld);
       const currentBeatIndex = baseBeatIndex + beatsSinceAnchor;
-      const currentBeatTime = previousStartAtLeaderMs + (currentBeatIndex - baseBeatIndex) * msPerBeatOld;
+      const currentBeatTime =
+        previousStartAtLeaderMs + (currentBeatIndex - baseBeatIndex) * msPerBeatOld;
       const leadRemainingMs = Math.max(0, BPM_CHANGE_LEAD_MS - (now - currentBeatTime));
       const beatsAhead = Math.max(1, Math.ceil(leadRemainingMs / msPerBeatOld));
       const changeBeatIndex = currentBeatIndex + beatsAhead;
-      const changeAtLeaderMs = previousStartAtLeaderMs + (changeBeatIndex - baseBeatIndex) * msPerBeatOld;
+      const changeAtLeaderMs =
+        previousStartAtLeaderMs + (changeBeatIndex - baseBeatIndex) * msPerBeatOld;
 
       this.roomState.setBeatAnchor(changeAtLeaderMs, changeBeatIndex);
 

@@ -9,12 +9,14 @@ Pulse Link is a phone-first P2P WebRTC metronome app that synchronizes a shared 
 ## Core Architecture
 
 ### Topology & Lifetime
+
 - **Star topology**: Leader connects to each peer individually (not mesh)
 - **Leader-owned state**: All room state lives on leader's device
 - **Room lifetime**: Room closes when leader leaves (no host migration in V1)
 - **Ephemeral**: No server-side persistence of room state
 
 ### Key Components (as designed in README.md:181-191)
+
 - **SignalingTransport** (`signaling/transport.ts`, `signaling/supabase.ts`): Abstraction for WebRTC signaling via Supabase Realtime Broadcast (used only for initial connection setup)
 - **WebRTC Manager** (`webrtc/leader.ts`, `webrtc/peer.ts`): Handles P2P DataChannel connections after signaling
 - **Sync Engine** (`sync/clock.ts`): Ping/pong time offset estimation and drift correction
@@ -23,23 +25,35 @@ Pulse Link is a phone-first P2P WebRTC metronome app that synchronizes a shared 
 - **UI Layer** (`ui/`): Create/Join/Playing views
 
 ### Message Protocol
+
 All messages follow the envelope structure (README.md:76-97):
+
 ```typescript
 type Msg = {
-  v: 1
-  roomId: string
-  from: string
-  to: string | "*"  // "*" for broadcast
-  type: "join" | "leader_hello" | "offer" | "answer" | "ice" |
-        "start_announce" | "time_ping" | "time_pong" |
-        "param_update" | "room_closed"
-  ts: number
-  payload: any
-}
+  v: 1;
+  roomId: string;
+  from: string;
+  to: string | '*'; // "*" for broadcast
+  type:
+    | 'join'
+    | 'leader_hello'
+    | 'offer'
+    | 'answer'
+    | 'ice'
+    | 'start_announce'
+    | 'time_ping'
+    | 'time_pong'
+    | 'param_update'
+    | 'room_closed';
+  ts: number;
+  payload: any;
+};
 ```
 
 ### Time Synchronization
+
 Uses ping/pong protocol (README.md:118-143):
+
 1. Leader sends `time_ping` with `t1LeaderMs`
 2. Peer responds immediately with `time_pong` containing `t1LeaderMs`, `t2PeerMs` (receive), `t3PeerMs` (send)
 3. Offset estimated from best RTT sample
@@ -47,7 +61,9 @@ Uses ping/pong protocol (README.md:118-143):
 5. Micro-corrections applied when phase error > 20ms
 
 ### Beat Grid Synchronization
+
 Leader announces beat grid anchor (README.md:101-114):
+
 - `bpm`: Tempo
 - `version`: State version number
 - `anchorLeaderMs`: Timestamp in leader's clock
@@ -74,14 +90,14 @@ Peers use offset to convert leader anchor to their local time, then schedule cli
 
 ```typescript
 type RoomState = {
-  roomId: string
-  leaderId: string
-  bpm: number
-  version: number
-  status: "open" | "countdown" | "running" | "closed"
-  startAtLeaderMs?: number
-  peers: Record<string, PeerConnState>
-}
+  roomId: string;
+  leaderId: string;
+  bpm: number;
+  version: number;
+  status: 'open' | 'countdown' | 'running' | 'closed';
+  startAtLeaderMs?: number;
+  peers: Record<string, PeerConnState>;
+};
 ```
 
 Leader maintains authoritative state. Peers receive updates via DataChannel messages. Room is self-healing via periodic leader announcements.

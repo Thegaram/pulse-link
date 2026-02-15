@@ -6,4 +6,3 @@ export function flashBeat(node: HTMLElement, isDownbeat: boolean): void {
     node.classList.add('downbeat');
   }
 }
-
